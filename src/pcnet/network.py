@@ -68,7 +68,8 @@ class PCNetwork:
             else None
         )
         self.gated = (
-            GatedTransition(n_top, rng) if self.cfg.gated_transition else None
+            GatedTransition(n_top, rng, eligibility=self.cfg.eligibility)
+            if self.cfg.gated_transition else None
         )
 
         # Estados, pré-alocados (espelham os arrays estáticos do C).

@@ -109,3 +109,44 @@ def test_gated_and_plain_transitions_are_exclusive_paths():
     net.run(make_signal(n_frames=60, frame_len=32, seed=1).frames, learn=True)
     # o A clássico fica intocado; o portão é que aprende
     assert np.array_equal(A0, net.A)
+
+
+def test_eligibility_trace_accumulates_and_decays_with_retention():
+    """O rasto é mecânica pura e testável: acumula o produto instantâneo e
+    decai a (1-g) — a retenção do portão é a meia-vida do crédito."""
+    from pcnet.gated import GatedTransition
+
+    t = GatedTransition(3, np.random.default_rng(0), eligibility=True)
+    z1 = np.array([0.4, -0.2, 0.3], dtype=F)
+    z2 = np.array([-0.1, 0.5, 0.2], dtype=F)
+
+    t.predict(z1)
+    g1 = t.gate.copy()
+    inst1 = np.outer((g1 * (1 - t._c**2)) / (float(z1 @ z1) + 1e-6), z1)
+    t.learn(np.zeros(3, dtype=F), lr=0.1)  # eps=0: só o rasto se move
+    assert np.allclose(t.eA, inst1, atol=1e-5)
+
+    t.predict(z2)
+    g2 = t.gate.copy()
+    inst2 = np.outer((g2 * (1 - t._c**2)) / (float(z2 @ z2) + 1e-6), z2)
+    t.learn(np.zeros(3, dtype=F), lr=0.1)
+    assert np.allclose(t.eA, (1 - g2)[:, None] * inst1 + inst2, atol=1e-4)
+
+
+def test_eligibility_does_not_hurt_instant_credit_much():
+    """Num problema sem atraso, o rasto só pode custar um pouco de ruído de
+    crédito antigo — se custar muito, a implementação está errada. (O ganho
+    com atraso mede-se no benchmark, não aqui: construir atraso verdadeiro
+    num teste unitário requer a rede toda.)"""
+    from pcnet.gated import GatedTransition
+
+    def residual(eligibility):
+        t = GatedTransition(4, np.random.default_rng(5), eligibility=eligibility)
+        rng = np.random.default_rng(7)
+        z = np.array([0.5, -0.3, 0.2, 0.1], dtype=F)
+        target = np.array([0.1, 0.2, -0.3, 0.5], dtype=F)
+        for _ in range(400):
+            t.learn((target - t.predict(z)).astype(F), lr=0.2)
+        return float(np.abs(target - t.predict(z)).sum())
+
+    assert residual(True) <= residual(False) * 1.5 + 1e-3

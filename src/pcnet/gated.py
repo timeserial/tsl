@@ -51,9 +51,11 @@ def _sigmoid(a: np.ndarray) -> np.ndarray:
 class GatedTransition:
     """ẑ(t) = (1-g)⊙z + g⊙tanh(A·z), com g = σ(G·z + b) aprendido pelo erro."""
 
-    __slots__ = ("n", "A", "G", "b", "_z", "_c", "_g")
+    __slots__ = ("n", "A", "G", "b", "_z", "_c", "_g", "eA", "eG", "eb",
+                 "eligibility")
 
-    def __init__(self, n: int, rng: np.random.Generator, gate_bias: float = 0.0):
+    def __init__(self, n: int, rng: np.random.Generator, gate_bias: float = 0.0,
+                 eligibility: bool = False):
         self.n = int(n)
         self.A = (
             np.eye(n, dtype=F)
@@ -65,6 +67,18 @@ class GatedTransition:
         self._z = np.zeros(n, dtype=F)
         self._c = np.zeros(n, dtype=F)
         self._g = np.full(n, 0.5, dtype=F)
+
+        # Traços de elegibilidade (e-prop / synaptic tagging): cada sinapse
+        # guarda um rasto do que acabou de fazer, e o erro que chegar
+        # enquanto o rasto dura credita-a — crédito através do tempo, sem
+        # BPTT. O rasto decai à taxa de retenção do próprio portão (1-g):
+        # uma unidade que retém muito propaga crédito para longe; uma que
+        # atualiza sempre só é creditada pelo instante. A memória do crédito
+        # e a memória do estado são a mesma coisa, como deve ser.
+        self.eligibility = bool(eligibility)
+        self.eA = np.zeros((n, n), dtype=F) if eligibility else None
+        self.eG = np.zeros((n, n), dtype=F) if eligibility else None
+        self.eb = np.zeros(n, dtype=F) if eligibility else None
 
     # ------------------------------------------------------------------
     @property
@@ -83,23 +97,40 @@ class GatedTransition:
         return ((1.0 - self._g) * z_prev + self._g * self._c).astype(F, copy=False)
 
     def learn(self, eps: np.ndarray, lr: float, grad_clip: float = 0.0) -> None:
-        """Três fatores, tudo local, passo normalizado por ‖z‖²."""
+        """Três fatores, tudo local, passo normalizado por ‖z‖².
+
+        Com elegibilidade, o produto instantâneo é acumulado num rasto por
+        sinapse que decai a (1-g), e é o rasto que o erro credita.
+        """
         z, c, g = self._z, self._c, self._g
         norm = float(np.dot(z, z)) + 1e-6
 
-        # crédito para a dinâmica: passa pelo portão
-        mod_c = (eps * g * (1.0 - c * c)).astype(F, copy=False)
-        dA = np.outer(mod_c / norm, z).astype(F, copy=False)
-        # crédito para o portão: proporcional ao que a escolha teria mudado
-        mod_g = (eps * (c - z) * g * (1.0 - g)).astype(F, copy=False)
-        dG = np.outer(mod_g / norm, z).astype(F, copy=False)
+        inst_c = np.outer((g * (1.0 - c * c)) / norm, z).astype(F, copy=False)
+        inst_g_vec = ((c - z) * g * (1.0 - g)).astype(F, copy=False)
+        inst_g = np.outer(inst_g_vec / norm, z).astype(F, copy=False)
+
+        if self.eligibility:
+            retain = (1.0 - g)[:, None]
+            self.eA *= retain
+            self.eA += inst_c
+            self.eG *= retain
+            self.eG += inst_g
+            self.eb *= (1.0 - g)
+            self.eb += inst_g_vec
+            dA = (eps[:, None] * self.eA).astype(F, copy=False)
+            dG = (eps[:, None] * self.eG).astype(F, copy=False)
+            db = (eps * self.eb).astype(F, copy=False)
+        else:
+            dA = (eps[:, None] * inst_c).astype(F, copy=False)
+            dG = (eps[:, None] * inst_g).astype(F, copy=False)
+            db = (eps * inst_g_vec).astype(F, copy=False)
 
         if grad_clip > 0.0:
             np.clip(dA, -grad_clip, grad_clip, out=dA)
             np.clip(dG, -grad_clip, grad_clip, out=dG)
         self.A += F(lr) * dA
         self.G += F(lr) * dG
-        self.b += F(lr) * mod_g
+        self.b += F(lr) * db
 
     def sigma_max(self) -> float:
         """Limite para o passo de assentamento. O Jacobiano da mistura é

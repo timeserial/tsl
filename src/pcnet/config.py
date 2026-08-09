@@ -111,6 +111,9 @@ class PCConfig:
     # contexto — o mecanismo que a decomposição do muro apontou como a maior
     # parte da distância para o backprop.
     gated_transition: bool = False
+    # Traços de elegibilidade na transição portada (e-prop / synaptic
+    # tagging): crédito através do tempo com memória por sinapse, sem BPTT.
+    eligibility: bool = False
     # Portões também nas camadas geradoras: ẑ_l = g⊙f(W·z), g = σ(G·z + b).
     # O crédito continua local — ΔW ganha o fator g, ΔG usa ε⊙f(Wz)⊙g(1-g) —
     # e o caminho ascendente ganha o termo do portão. É o análogo espacial do

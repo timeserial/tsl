@@ -491,12 +491,23 @@ Eliminados com números, no mesmo protocolo: portões nas camadas geradoras
 vizinhas ((64,16) estreita demais, (64,32) instável — outra vez a taxa contra
 o limite de estabilidade).
 
-### Próximo tijolo
+### Resultados dos tijolos seguintes
 
-Os 0.066 que faltam até ao nível do GRU-sem-tempo, e depois os ~0.09
-temporais: **traços de elegibilidade** (synaptic tagging; e-prop de Bellec
-2020) — sinapses que guardam um rasto do que fizeram, creditado pelo erro que
-chega depois. Continua tudo local, continua tudo portável para o crossbar.
+**Traços de elegibilidade** (synaptic tagging; e-prop): implementados na
+célula portada — o rasto decai à taxa de retenção do próprio portão, uma
+memória por sinapse, tudo local. Resultado: **empate** (0.638 ± 0.028 contra
+0.641 ± 0.055). Coerente com a decomposição, que dava ao crédito temporal só
+~0.09 mesmo para o GRU. Fica implementado (`eligibility`), desligado por
+omissão.
+
+**O limiar de esparsidade é um portão de plasticidade.** Hipótese testada:
+treinar com o erro completo (θ=0) e censurar só na inferência devia recuperar
+gradiente fino. **Invertida pelos dados**: treinar sem limiar dá 0.769 contra
+0.639 com ele. O limiar durante a aprendizagem faz proteção anti-interferência
+— erro pequeno significa "já está bem previsto, não tocar", e em multi-tarefa
+isso impede cada tarefa de corroer as outras. A transmissão esparsa e a
+plasticidade seletiva são o mesmo mecanismo, e ele estava no desenho desde o
+passo 1 sem sabermos o segundo papel.
 
 ## Como está organizado
 
