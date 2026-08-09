@@ -106,6 +106,17 @@ class PCConfig:
     # por contexto — sem isto, tarefas com dinâmicas diferentes puxam a única
     # matriz para uma média que não serve nenhuma, e aumentar o tamanho da
     # rede não resolve (medido: dobrar os parâmetros não muda nada).
+    # Transição com portões multiplicativos (ver gated.py): a dinâmica do
+    # topo passa a ser escolhida pelo erro, unidade a unidade, em função do
+    # contexto — o mecanismo que a decomposição do muro apontou como a maior
+    # parte da distância para o backprop.
+    gated_transition: bool = False
+    # Portões também nas camadas geradoras: ẑ_l = g⊙f(W·z), g = σ(G·z + b).
+    # O crédito continua local — ΔW ganha o fator g, ΔG usa ε⊙f(Wz)⊙g(1-g) —
+    # e o caminho ascendente ganha o termo do portão. É o análogo espacial do
+    # portão temporal: decidir por unidade *que parte* da previsão se aplica
+    # neste contexto.
+    gated_layers: bool = False
     n_dynamics: int = 1
     dynamics_tau: float = 0.25  # nitidez do selector (baixo = mais exclusivo)
     proto_lr: float = 0.02

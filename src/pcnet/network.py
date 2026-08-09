@@ -26,6 +26,7 @@ from .config import PCConfig
 from .device import AnalogArray, DeviceModel, quantize_adc
 from .dtypes import F
 from .episodic import EpisodicConfig, EpisodicMemory
+from .gated import GatedTransition
 from .layer import PCLayer
 from .mixture import TopMixture
 from .metrics import EXIT_CEILING, EXIT_EXPLAINED, EXIT_STALLED, StepTrace
@@ -46,7 +47,8 @@ class PCNetwork:
         for l in range(self.L):
             act = self.cfg.sensory_activation if l == 0 else self.cfg.latent_activation
             self.layers.append(
-                PCLayer(sizes[l], sizes[l + 1], act, rng, self.cfg.init_scale)
+                PCLayer(sizes[l], sizes[l + 1], act, rng, self.cfg.init_scale,
+                        gated=self.cfg.gated_layers)
             )
 
         # Transição temporal do topo: uma recorrência linear + tanh.
@@ -64,6 +66,9 @@ class PCNetwork:
             TopMixture(n_top, self.cfg.n_dynamics, rng, self.cfg.dynamics_tau)
             if self.cfg.n_dynamics > 1
             else None
+        )
+        self.gated = (
+            GatedTransition(n_top, rng) if self.cfg.gated_transition else None
         )
 
         # Estados, pré-alocados (espelham os arrays estáticos do C).
@@ -214,6 +219,12 @@ class PCNetwork:
         z_prev = self._z_top_prev
         if self.cfg.state_leak:
             z_prev = (F(1.0 - self.cfg.state_leak) * z_prev).astype(F, copy=False)
+        if self.gated is not None:
+            # A mistura (1-g)z + g·tanh(Az) já inclui a não-linearidade e a
+            # retenção: devolve-se o prior diretamente, sem tanh nem λ extra.
+            self.prior_top[:] = self.gated.predict(z_prev)
+            self.a_top[:] = self.prior_top
+            return self.prior_top
         if self.mixture is not None:
             self.a_top[:] = self.mixture.predict(z_prev)
         else:
@@ -537,7 +548,7 @@ class PCNetwork:
             # no topo.
             for l in range(1, self.L + 1):
                 lay = self.layers[l - 1]
-                up = lay.backward(eps_mod[l - 1])
+                up = lay.backward(eps_mod[l - 1], eps_thr[l - 1])
                 nnz = int(np.count_nonzero(eps_thr[l - 1]))
                 trace.macs_up += lay.macs_up(nnz)
                 trace.macs_up_dense += lay.macs_down()
@@ -579,6 +590,11 @@ class PCNetwork:
                     cfg.meta_decay,
                 )
                 self.prec_hier[l].learn(self.z[l] - self.layers[l].zhat)
+                if eps_thr[l] is not None or l == 0:
+                    self.layers[l].learn_gate(
+                        eps_thr[l] if l > 0 else eps_thr[0],
+                        self.z[l + 1], cfg.w_lr, cfg.grad_clip,
+                    )
             if cfg.use_transition:
                 self._learn_transition(eps_thr[self.L])
             # cada transição aprende com o seu próprio erro temporal e com o
@@ -646,6 +662,9 @@ class PCNetwork:
     def _learn_transition(self, eps_top_thr: np.ndarray) -> None:
         """ΔA ∝ (ε_topo ⊙ f') ⊗ z_topo(t-1). Também local."""
         cfg = self.cfg
+        if self.gated is not None:
+            self.gated.learn(eps_top_thr, cfg.a_lr, cfg.grad_clip)
+            return
         eps_mod = eps_top_thr * self._fprime_top(self.a_top)
         if self.mixture is not None:
             self.mixture.learn(eps_mod, cfg.a_lr, cfg.proto_lr, cfg.grad_clip)

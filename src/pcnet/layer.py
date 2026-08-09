@@ -28,7 +28,7 @@ class PCLayer:
     __slots__ = (
         "n_below", "n_above", "W", "W_eff", "device",
         "act_name", "_f", "_fprime", "a", "zhat",
-        "sigma_max", "_pi_v", "importance",
+        "sigma_max", "_pi_v", "importance", "Gg", "bg", "_gate", "_base",
     )
 
     def __init__(
@@ -38,6 +38,7 @@ class PCLayer:
         activation: str,
         rng: np.random.Generator,
         init_scale: float = 1.0,
+        gated: bool = False,
     ) -> None:
         self.n_below = int(n_below)
         self.n_above = int(n_above)
@@ -67,6 +68,20 @@ class PCLayer:
         # próprio gradiente local. É a diagonal da informação de Fisher, que
         # aqui está disponível na sinapse sem nenhuma passagem para trás.
         self.importance = np.zeros_like(self.W)
+
+        # Portão de saída (opcional): decide por unidade quanto da previsão
+        # gerada se aplica neste contexto. bias +2 -> g≈0.88: nasce quase
+        # aberto, para começar como a camada sem portões e só fechar onde o
+        # erro o justificar.
+        if gated:
+            self.Gg = (rng.standard_normal((self.n_below, self.n_above))
+                       * (0.3 / np.sqrt(self.n_above))).astype(F)
+            self.bg = np.full(self.n_below, 2.0, dtype=F)
+        else:
+            self.Gg = None
+            self.bg = None
+        self._gate = np.ones(self.n_below, dtype=F)
+        self._base = np.zeros(self.n_below, dtype=F)
 
     # -- substrato ----------------------------------------------------------
     def attach_device(self, array) -> None:
@@ -144,21 +159,46 @@ class PCLayer:
         np.dot(self.W_eff, z_above, out=self.a)
         if self.device is not None:
             self.a[:] = self.device.read(self.a)
-        self.zhat = self._f(self.a).astype(F, copy=False)
+        self._base = self._f(self.a).astype(F, copy=False)
+        if self.Gg is not None:
+            self._gate = 1.0 / (1.0 + np.exp(-(self.Gg.dot(z_above) + self.bg)))
+            self._gate = self._gate.astype(F, copy=False)
+            self.zhat = (self._gate * self._base).astype(F, copy=False)
+        else:
+            self.zhat = self._base
         return self.zhat
 
     # -- caminho ascendente: o erro ----------------------------------------
     def modulated_error(self, eps_below: np.ndarray) -> np.ndarray:
-        """ε ⊙ f'(a): o erro tal como o vê a sinapse, já pesado pelo ganho."""
-        return (eps_below * self._fprime(self.a)).astype(F, copy=False)
+        """ε ⊙ [g] ⊙ f'(a): o erro tal como o vê a sinapse.
 
-    def backward(self, eps_mod: np.ndarray) -> np.ndarray:
-        """Wᵀ · (ε ⊙ f'): a correção que sobe para o estado de cima.
+        Com portão, o crédito para W passa por ele — um portão fechado
+        significa "esta previsão não se aplicou aqui", e W não leva culpa.
+        """
+        mod = eps_below * self._fprime(self.a)
+        if self.Gg is not None:
+            mod = mod * self._gate
+        return mod.astype(F, copy=False)
 
-        É o mesmo crossbar lido ao contrário, logo sofre os mesmos desvios de
-        programação e mais uma dose de ruído de leitura.
+    def gate_error(self, eps_below: np.ndarray) -> np.ndarray:
+        """ε ⊙ f(Wz) ⊙ g(1-g): o crédito do próprio portão."""
+        assert self.Gg is not None
+        return (eps_below * self._base * self._gate * (1.0 - self._gate)).astype(
+            F, copy=False
+        )
+
+    def backward(self, eps_mod: np.ndarray,
+                 eps_raw: np.ndarray | None = None) -> np.ndarray:
+        """Wᵀ·(ε⊙[g]⊙f') [+ Gᵀ·(ε⊙f⊙g(1-g))]: a correção que sobe.
+
+        Com portão há dois caminhos para o estado de cima: através da
+        previsão e através da escolha de a aplicar. É o mesmo crossbar lido
+        ao contrário, logo sofre os mesmos desvios de programação e mais uma
+        dose de ruído de leitura.
         """
         out = self.W_eff.T.dot(eps_mod).astype(F, copy=False)
+        if self.Gg is not None and eps_raw is not None:
+            out = out + self.Gg.T.dot(self.gate_error(eps_raw))
         return self.device.read(out) if self.device is not None else out
 
     # -- plasticidade -------------------------------------------------------
@@ -196,6 +236,18 @@ class PCLayer:
         # ficava com a estimativa da inicialização e o passo adaptativo nunca
         # chegava a atuar.
         self.refresh_device()
+
+    def learn_gate(self, eps_raw: np.ndarray, z_above: np.ndarray,
+                   lr: float, grad_clip: float = 0.0) -> None:
+        """ΔG ∝ (ε ⊙ f(Wz) ⊙ g(1-g)) ⊗ z. Três fatores, local."""
+        if self.Gg is None:
+            return
+        mod = self.gate_error(eps_raw)
+        dG = np.outer(mod, z_above).astype(F, copy=False)
+        if grad_clip > 0.0:
+            np.clip(dG, -grad_clip, grad_clip, out=dG)
+        self.Gg += F(lr) * dG
+        self.bg += F(lr) * mod
 
     # -- contabilidade de energia ------------------------------------------
     def macs_down(self) -> int:
