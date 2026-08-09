@@ -440,6 +440,64 @@ de citado. Não é fatal para *uma* tarefa — aí a rede é boa e continua a se
 que o projeto precisa. É fatal para a ambição de acumular vários mundos, e não
 o vou disfarçar.
 
+## O ataque ao problema aberto: crédito local vs backprop
+
+Depois de dez mecanismos de sistema falharem, a investigação mudou de nível:
+já não "que módulos pôr à volta da regra", mas "o que falta à regra". Dois
+resultados estruturam tudo o que se segue.
+
+### A decomposição do muro
+
+O mesmo GRU, a mesma tarefa de 3 dinâmicas, variando só até onde o gradiente
+pode viajar no tempo:
+
+| horizonte do crédito temporal | NRMSE |
+|---|---|
+| 0 passos (crédito só dentro do instante) | 0.576 |
+| 4 passos | 0.501 |
+| BPTT completo | 0.490 |
+| a nossa regra local | 0.781 |
+
+**A maior parte do muro está dentro de um único instante, não no tempo.** E a
+única diferença estrutural do GRU nesse regime são os portões multiplicativos
+— com o crédito a fluir por dentro deles. As nossas tentativas de modularidade
+falhavam exatamente por isso: mistura escolhida por semelhança e esparsidade
+por magnitude são cegas ao erro; o portão do GRU é escolhido *pelo* erro.
+
+### O que moveu o teto (e o que não)
+
+`gated.py`: a transição do topo passa a ẑ = (1-g)⊙z + g⊙tanh(A·z), com
+g = σ(G·z+b) aprendido por uma regra de três fatores (pré × pós × portão),
+tudo local, passo NLMS. Gating multiplicativo é dos mecanismos mais
+documentados da neurofisiologia — shunting, gating dendrítico, tálamo.
+
+| passo | NRMSE (3 tarefas, conjunto) |
+|---|---|
+| base, regra local | 0.781 ± 0.003 |
+| matriz linear (marco) | 0.741 |
+| + portão temporal no topo (16) | 0.702 ± 0.016 |
+| **+ cérebro raso: (64,24), 2 níveis** | **0.642 ± 0.003** |
+| GRU sem crédito temporal (alvo da fase) | 0.576 |
+| backprop completo (horizonte) | 0.490 |
+
+O portão foi o primeiro mecanismo em onze que desceu o teto. Encurtar a
+hierarquia — a *shallow brain hypothesis*, que está na secção 2 do
+`CONTEXTO.md` desde o primeiro dia — desceu-o outra vez, com **menos
+parâmetros** (2712 contra 3344) e a dispersão mais apertada de toda a sessão.
+Sem custo medido na tarefa única.
+
+Eliminados com números, no mesmo protocolo: portões nas camadas geradoras
+(0.804 sós, 0.904 combinados — interferem com o assentamento), e larguras
+vizinhas ((64,16) estreita demais, (64,32) instável — outra vez a taxa contra
+o limite de estabilidade).
+
+### Próximo tijolo
+
+Os 0.066 que faltam até ao nível do GRU-sem-tempo, e depois os ~0.09
+temporais: **traços de elegibilidade** (synaptic tagging; e-prop de Bellec
+2020) — sinapses que guardam um rasto do que fizeram, creditado pelo erro que
+chega depois. Continua tudo local, continua tudo portável para o crossbar.
+
 ## Como está organizado
 
 ```
