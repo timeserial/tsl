@@ -476,9 +476,14 @@ documentados da neurofisiologia — shunting, gating dendrítico, tálamo.
 | base, regra local | 0.781 ± 0.003 |
 | matriz linear (marco) | 0.741 |
 | + portão temporal no topo (16) | 0.702 ± 0.016 |
-| **+ cérebro raso: (64,24), 2 níveis** | **0.642 ± 0.003** |
-| GRU sem crédito temporal (alvo da fase) | 0.576 |
+| **+ cérebro raso: (64,24), 2 níveis** | **0.659 ± 0.046** (6 seeds) |
+| GRU sem crédito temporal (alvo da fase) | 0.575 ± 0.019 (3 seeds) |
 | backprop completo (horizonte) | 0.490 |
+
+Os dois marcos críticos foram re-medidos com seeds a sério: o campeão estava
+ligeiramente inflacionado por sorte de seeds (0.642 com 2 -> 0.659 com 6) e o
+alvo confirmou-se. O intervalo restante (0.084, ~2σ) é real: a fase espacial
+fechou 59% e não está terminada.
 
 O portão foi o primeiro mecanismo em onze que desceu o teto. Encurtar a
 hierarquia — a *shallow brain hypothesis*, que está na secção 2 do
