@@ -68,7 +68,8 @@ class PCNetwork:
             else None
         )
         self.gated = (
-            GatedTransition(n_top, rng, eligibility=self.cfg.eligibility)
+            GatedTransition(n_top, rng, eligibility=self.cfg.eligibility,
+                            input_dim=sizes[0] if self.cfg.thalamic else 0)
             if self.cfg.gated_transition else None
         )
 
@@ -223,7 +224,8 @@ class PCNetwork:
         if self.gated is not None:
             # A mistura (1-g)z + g·tanh(Az) já inclui a não-linearidade e a
             # retenção: devolve-se o prior diretamente, sem tanh nem λ extra.
-            self.prior_top[:] = self.gated.predict(z_prev)
+            u = self._z_prev[0] if self.cfg.thalamic else None
+            self.prior_top[:] = self.gated.predict(z_prev, u)
             self.a_top[:] = self.prior_top
             return self.prior_top
         if self.mixture is not None:

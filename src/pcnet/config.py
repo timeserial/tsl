@@ -114,6 +114,9 @@ class PCConfig:
     # Traços de elegibilidade na transição portada (e-prop / synaptic
     # tagging): crédito através do tempo com memória por sinapse, sem BPTT.
     eligibility: bool = False
+    # O relé talâmico: o candidato e o portão da transição veem também a
+    # trama anterior, em paralelo com o estado recorrente (ver gated.py).
+    thalamic: bool = False
     # Portões também nas camadas geradoras: ẑ_l = g⊙f(W·z), g = σ(G·z + b).
     # O crédito continua local — ΔW ganha o fator g, ΔG usa ε⊙f(Wz)⊙g(1-g) —
     # e o caminho ascendente ganha o termo do portão. É o análogo espacial do

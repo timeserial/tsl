@@ -52,10 +52,10 @@ class GatedTransition:
     """ẑ(t) = (1-g)⊙z + g⊙tanh(A·z), com g = σ(G·z + b) aprendido pelo erro."""
 
     __slots__ = ("n", "A", "G", "b", "_z", "_c", "_g", "eA", "eG", "eb",
-                 "eligibility")
+                 "eligibility", "B", "H", "_u")
 
     def __init__(self, n: int, rng: np.random.Generator, gate_bias: float = 0.0,
-                 eligibility: bool = False):
+                 eligibility: bool = False, input_dim: int = 0):
         self.n = int(n)
         self.A = (
             np.eye(n, dtype=F)
@@ -80,6 +80,21 @@ class GatedTransition:
         self.eG = np.zeros((n, n), dtype=F) if eligibility else None
         self.eb = np.zeros(n, dtype=F) if eligibility else None
 
+        # O relé talâmico: o candidato e o portão veem também a entrada
+        # anterior, não só o estado recorrente — c = tanh(A·z + B·u),
+        # g = σ(G·z + H·u + b). É a última diferença estrutural para a célula
+        # do GRU, e no córtex é literal: a entrada chega em paralelo com a
+        # recorrência. Crédito local na mesma; u tem norma própria (NLMS).
+        if input_dim > 0:
+            self.B = (rng.standard_normal((n, input_dim))
+                      * (0.2 / np.sqrt(input_dim))).astype(F)
+            self.H = (rng.standard_normal((n, input_dim))
+                      * (0.3 / np.sqrt(input_dim))).astype(F)
+        else:
+            self.B = None
+            self.H = None
+        self._u = np.zeros(max(input_dim, 1), dtype=F)
+
     # ------------------------------------------------------------------
     @property
     def n_params(self) -> int:
@@ -90,10 +105,17 @@ class GatedTransition:
         """O portão da última previsão — instrumentação."""
         return self._g
 
-    def predict(self, z_prev: np.ndarray) -> np.ndarray:
+    def predict(self, z_prev: np.ndarray,
+                u: np.ndarray | None = None) -> np.ndarray:
         self._z[:] = z_prev
-        self._c[:] = np.tanh(self.A.dot(z_prev))
-        self._g[:] = _sigmoid(self.G.dot(z_prev) + self.b)
+        a_c = self.A.dot(z_prev)
+        a_g = self.G.dot(z_prev) + self.b
+        if self.B is not None and u is not None:
+            self._u[:] = u
+            a_c = a_c + self.B.dot(u)
+            a_g = a_g + self.H.dot(u)
+        self._c[:] = np.tanh(a_c)
+        self._g[:] = _sigmoid(a_g)
         return ((1.0 - self._g) * z_prev + self._g * self._c).astype(F, copy=False)
 
     def learn(self, eps: np.ndarray, lr: float, grad_clip: float = 0.0) -> None:
@@ -131,6 +153,19 @@ class GatedTransition:
         self.A += F(lr) * dA
         self.G += F(lr) * dG
         self.b += F(lr) * db
+
+        if self.B is not None:
+            u = self._u
+            un = float(np.dot(u, u)) + 1e-6
+            mod_c = (eps * g * (1.0 - c * c)).astype(F, copy=False)
+            mod_g = ((eps * (c - z) * g * (1.0 - g))).astype(F, copy=False)
+            dB = np.outer(mod_c / un, u).astype(F, copy=False)
+            dH = np.outer(mod_g / un, u).astype(F, copy=False)
+            if grad_clip > 0.0:
+                np.clip(dB, -grad_clip, grad_clip, out=dB)
+                np.clip(dH, -grad_clip, grad_clip, out=dH)
+            self.B += F(lr) * dB
+            self.H += F(lr) * dH
 
     def sigma_max(self) -> float:
         """Limite para o passo de assentamento. O Jacobiano da mistura é
