@@ -15,9 +15,28 @@ Por ordem:
 3. ~~Crítico de 1 bit~~ — implementado (`critic_retract`) e nulo em todas as
    doses (0.681/0.653/0.659 vs 0.659±0.046). Um bit de retração chega tarde e
    desfaz bom e mau por igual.
-4. **Perturbação + dopamina** — a aposta de fundo: regra local (enviesada,
-   estável) + perturbação de nós (não-enviesada, ruidosa) combinadas como
-   estimador com controlo de variância. Por desenhar.
+4. ~~Perturbação + dopamina~~ — REINFORCE antitético sobre A diverge (3.63).
+
+## A REGRA DE DOIS TEMPOS (o resultado da sessão)
+
+Creditar do erro em malha aberta retroprojetado (h = W0ᵀ·ε0, cadeia exata
+pelo portão), ANTES de assentar. O assentamento infere; o crédito tira-se
+antes. Numa rede rasa isto é 100% local — a transposta é a leitura que o
+crossbar já faz.
+
+Conjunto 3 mundos: 0.579±0.004 (Fila 1) e 0.551±0.020 (Fila 3, variante),
+contra 0.575±0.019 do GRU-gradiente-exato. EMPATE. A regra local antiga
+fazia 0.659. Ressalvas medidas: imposto em tarefa única (0.108 vs 0.087);
+o sequencial ainda precisa da proteção acoplada à via nova.
+
+Mortos nas filas seguintes: traços e-prop sobre a regra nova (0.595-0.833,
+todos piores); híbrido acordado/dormir (0.910 — as regras lutam);
+composição por componente W0-clássico+transição-exata (2.08 — diverge:
+duas regras, dois alvos, um W0).
+
+Em curso: RMSProp local (paridade de otimizador com o alvo), crédito exato
+a 2 passos, paridade de épocas, topos largos, chão da tarefa por GRU
+gigante.
 
 Banco de suplentes (por ordem de aposta): crédito híbrido acordado-local /
 sono-gradiente sobre episódios (pragmático, alta probabilidade, quebra a
