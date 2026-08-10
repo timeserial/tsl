@@ -97,8 +97,10 @@ continua a ser achatar, não aprofundar. Detalhe de reprodução: o marco
 0.579 exige refresh_device() após atualizações externas de W0.
 Script: experiments/profundidade_empilhamento.py.
 
-Fila 12 em curso: restarts
-escolhidos pelo erro de treino (legítimo) para a consistência.
+**Fila 12, FINAL: 0.466 ± 0.028 — a média da regra local ABAIXO do BPTT
+(0.490), 5/6 seeds, via recozimento + restarts escolhidos pelo erro de
+treino (sem fuga de teste).** Separação ~0.9σ. Com o recorde 0.431, a
+frente sintética fecha: paridade robusta, superioridade média modesta.
 
 Banco de suplentes (por ordem de aposta): crédito híbrido acordado-local /
 sono-gradiente sobre episódios (pragmático, alta probabilidade, quebra a
