@@ -47,8 +47,24 @@ raras do fluxo intercalado), crédito exato a 2 passos (1.05), topo 48
 Sequencial: neurogénese (agente) 0.818±0.046 — recorde, integrada em
 src/pcnet/neurogenesis.py.
 
-Em curso: Fila 8 (400ép, lr 0.02-0.03, eval mi=100), Fila 7 (multi-mundo
-REAL: ETTm1+HAR acc+HAR gyro, clássica vs dois-tempos vs GRU-0 vs BPTT).
+## DADOS REAIS: a regra local ultrapassa o backprop
+
+Multi-mundo real — ETTm1 (transformador, 15 min) + HAR acelerómetro +
+HAR giroscópio (50 Hz), intercalados em blocos de 16, 327 tramas/domínio:
+
+| regra | NRMSE |
+|---|---|
+| local clássica (erro assentado) | 0.713 ± 0.039 |
+| GRU + BPTT completo | 0.650 ± 0.003 |
+| GRU gradiente exato (sem tempo) | 0.646 ± 0.001 |
+| **dois tempos (local)** | **0.636 ± 0.001** |
+
+No real, o BPTT nem ajuda o GRU — e a regra local de dois tempos ganha a
+ambos. Ressalvas: GRUs com 2 seeds e hiperparâmetros do protocolo
+sintético (por afinar de ambos os lados); um conjunto de domínios;
+assentamento fundo em inferência ainda não aplicado aqui.
+
+Em curso: Fila 8 (sintético: 400ép rumo a 0.490).
 
 Banco de suplentes (por ordem de aposta): crédito híbrido acordado-local /
 sono-gradiente sobre episódios (pragmático, alta probabilidade, quebra a
