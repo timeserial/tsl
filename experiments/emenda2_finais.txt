@@ -1,0 +1,15 @@
+EMENDA 2 — FINAIS (seleção já feita: nós topo=24 | adv gru h32 lr1e-3)
+  nós seed=0: 0.632
+  nós seed=1: 0.633
+  nós seed=2: 0.632
+  nós seed=3: 0.632
+  nós seed=4: 0.632
+  adv seed=0: 0.645
+  adv seed=1: 0.648
+  adv seed=2: 0.645
+  adv seed=3: 0.643
+  adv seed=4: 0.645
+
+NÓS: 0.632 ± 0.000
+ADVERSÁRIO: 0.645 ± 0.002
+VEREDICTO: NÓS
