@@ -1,0 +1,74 @@
+LUTA 3 — FINAIS (retoma; seleção registada em luta3_finais.txt)
+vencedores: nós topo=16 | adv ('gru', 16, 0.001) | NLMS mu=0.1 | ESN (0.3, 0.8)
+
+  nós seed=0: 0.7015
+  nós seed=1: 0.6982
+  nós seed=2: 0.7067
+  nós seed=3: 0.7044
+  nós seed=4: 0.7052
+  nós seed=5: 0.7079
+  nós seed=6: 0.7028
+  nós seed=7: 0.7041
+  nós seed=8: 0.7030
+  nós seed=9: 0.7038
+  nós seed=10: 0.7019
+  nós seed=11: 0.7048
+  nós seed=12: 0.7076
+  nós seed=13: 0.7081
+  nós seed=14: 0.7000
+  nós seed=15: 0.7026
+  nós seed=16: 0.7044
+  nós seed=17: 0.6997
+  nós seed=18: 0.7032
+  nós seed=19: 0.7109
+  adv seed=0: 0.6998
+  adv seed=1: 0.7033
+  adv seed=2: 0.7039
+  adv seed=3: 0.6985
+  adv seed=4: 0.7011
+  adv seed=5: 0.6973
+  adv seed=6: 0.6969
+  adv seed=7: 0.6986
+  adv seed=8: 0.6999
+  adv seed=9: 0.6996
+  adv seed=10: 0.7046
+  adv seed=11: 0.7028
+  adv seed=12: 0.7005
+  adv seed=13: 0.7100
+  adv seed=14: 0.7023
+  adv seed=15: 0.7007
+  adv seed=16: 0.7077
+  adv seed=17: 0.7031
+  adv seed=18: 0.6965
+  adv seed=19: 0.7158
+  esn seed=0: 0.7842
+  esn seed=1: 0.7571
+  esn seed=2: 0.7895
+  esn seed=3: 0.7648
+  esn seed=4: 0.7820
+  esn seed=5: 0.7754
+  esn seed=6: 0.7730
+  esn seed=7: 0.7922
+  esn seed=8: 0.7849
+  esn seed=9: 0.7636
+  esn seed=10: 0.7996
+  esn seed=11: 0.7830
+  esn seed=12: 0.7870
+  esn seed=13: 0.7907
+  esn seed=14: 0.7716
+  esn seed=15: 0.7679
+  esn seed=16: 0.7721
+  esn seed=17: 0.7979
+  esn seed=18: 0.7915
+  esn seed=19: 0.7779
+  persistência: 0.9356
+  NLMS-AR (mu=0.1): 0.7411
+
+=== VEREDICTOS (regra: IC bootstrap 95% da diferença) ===
+NÓS: 0.7040 ± 0.0031   ADV: 0.7021 ± 0.0047
+  diff(ADV-NÓS) IC95%=[-0.0042,0.0006]  Welch t=-1.50  d=-0.47
+  => EMPATE (IC contém 0)
+NÓS: 0.7040 ± 0.0031   ESN: 0.7803 ± 0.0119
+  diff(ESN-NÓS) IC95%=[0.0710,0.0815]  Welch t=27.81  d=8.79
+  => NÓS VENCE (IC exclui 0)
+  NÓS vs NLMS-AR (0.7411) e persistência (0.9356): determinísticos — comparar com a média e o IC de NÓS.
