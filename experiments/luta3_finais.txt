@@ -1,0 +1,18 @@
+ETTh1:OT: 271 tramas de 64 (217 treino / 54 teste) | RMS treino 0.998, teste 0.881
+apnea_a01: 7135 tramas de 64 (5708 treino / 1427 teste), 100 Hz | RMS treino 1, teste 0.964
+NTR=217 NT=185 NV=32
+
+=== SELEÇÃO (val médio de 2 seeds) ===
+  nós topo=16: val=0.7107 ['0.6684', '0.7531']
+  nós topo=24: val=0.7507 ['0.7307', '0.7708']
+  adv gru h=16 lr=0.001: val=0.6944
+  adv gru h=16 lr=0.003: val=0.7720
+  adv gru h=32 lr=0.001: val=0.7036
+  adv gru h=32 lr=0.003: val=0.9309
+  adv lstm h=16 lr=0.001: val=0.8452
+  adv lstm h=16 lr=0.003: val=0.9354
+  adv lstm h=32 lr=0.001: val=0.9805
+  adv lstm h=32 lr=0.003: val=1.0207
+vencedores: nós topo=16 | adv ('gru', 16, 0.001) | NLMS mu=0.1 | ESN (0.3, 0.8)
+
+=== FINAIS — 20 seeds, teste usado apenas aqui ===
