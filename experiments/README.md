@@ -47,6 +47,14 @@ raras do fluxo intercalado), crédito exato a 2 passos (1.05), topo 48
 Sequencial: neurogénese (agente) 0.818±0.046 — recorde, integrada em
 src/pcnet/neurogenesis.py.
 
+## SEQUENCIAL REAL: as descobertas transferem
+
+3 domínios reais em sequência, nunca revisitar (o protocolo do sensor):
+clássica 1.151±0.025 (esquecimento catastrófico) · neurogénese
+0.812±0.013 · **dois-tempos 0.800±0.026** — ambas as descobertas
+transferem; o crédito em malha aberta interfere menos com o passado por
+natureza. Combinação dois-tempos+neurogénese ainda por medir.
+
 ## DADOS REAIS: a regra local ultrapassa o backprop
 
 Multi-mundo real — ETTm1 (transformador, 15 min) + HAR acelerómetro +
