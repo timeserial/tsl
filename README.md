@@ -505,6 +505,18 @@ memória por sinapse, tudo local. Resultado: **empate** (0.638 ± 0.028 contra
 ~0.09 mesmo para o GRU. Fica implementado (`eligibility`), desligado por
 omissão.
 
+**Pesadelos (Crick & Mitchison): enterrados com disparos contados.** A ideia
+— anti-aprender sobre o que a rede gera espontaneamente, para apagar o
+compromisso espúrio — foi testada cega (0.675 ± 0.077, pior) e dirigida às
+misturas de contextos reais com disparos confirmados (1868 eventos: 0.660 ±
+0.052, nulo exato contra 0.659 ± 0.046). Mecanismo: o unlearning de Hopfield
+precisa de atratores discretos; num preditor contínuo o compromisso é a
+própria função, e anti-aprender nas misturas perturba os mesmos pesos que
+servem os mundos verdadeiros. Nota de método: a primeira versão dirigida deu
+resultados bit a bit iguais ao controlo — os pesadelos nunca tinham disparado
+(contextos amostrados sempre no mesmo ponto do ciclo). Desde então todos os
+mecanismos episódicos reportam contagem de disparos.
+
 **O limiar de esparsidade é um portão de plasticidade.** Hipótese testada:
 treinar com o erro completo (θ=0) e censurar só na inferência devia recuperar
 gradiente fino. **Invertida pelos dados**: treinar sem limiar dá 0.769 contra

@@ -316,7 +316,9 @@ class PCNetwork:
             self._recall[:] = F(self.memory.cfg.read_gain) * value
         return self._recall
 
-    def dream(self, n_dreams: int = 16, noise: float = 0.15) -> int:
+    def dream(self, n_dreams: int = 16, noise: float = 0.15,
+              anti: bool = False, anti_scale: float = 0.1,
+              seed_states: np.ndarray | None = None) -> int:
         """REM: o córtex gera os seus próprios padrões e treina sobre eles.
 
         Semeia o topo com um contexto guardado (mais ruído) ou com ruído puro,
@@ -329,9 +331,29 @@ class PCNetwork:
         """
         snapshot = self.snapshot_state()
         dreamed = 0
+        # Pesadelos (Crick & Mitchison 1983, "sonhamos para esquecer";
+        # Hopfield 1983, unlearning): o que a rede gera espontaneamente e não
+        # corresponde a nada real — as misturas espúrias, o compromisso entre
+        # mundos — recebe plasticidade NEGATIVA e pequena. A assimetria que
+        # protege o conhecimento verdadeiro é automática: o real é reforçado
+        # acordado todos os dias; o espúrio só existe em sonhos, e em sonhos
+        # apanha. O nosso sonho anterior falhou por ter o sinal ao contrário —
+        # treinar PARA o que se gera ancora a mediocridade.
+        from dataclasses import replace as _replace
+        original = self.cfg
+        if anti:
+            self.cfg = _replace(original,
+                                w_lr=-original.w_lr * anti_scale,
+                                a_lr=-original.a_lr * anti_scale,
+                                fast_path_lr=0.0)
         try:
-            for _ in range(n_dreams):
-                if self.memory is not None and self.memory.n_occupied:
+            for k in range(n_dreams):
+                if seed_states is not None:
+                    # Pesadelos dirigidos: o chamador escolhe os contextos a
+                    # visitar — tipicamente misturas de estados reais, que é
+                    # onde vive o compromisso espúrio.
+                    z = seed_states[k % len(seed_states)].astype(F).copy()
+                elif self.memory is not None and self.memory.n_occupied:
                     slot = self.memory.replay(1, self._replay_rng)
                     z = self.memory.keys[slot[0]].copy()
                 else:
@@ -349,6 +371,7 @@ class PCNetwork:
                 self.step(frame, learn=True, use_memory=False)
                 dreamed += 1
         finally:
+            self.cfg = original
             self.restore_state(snapshot)
         return dreamed
 
