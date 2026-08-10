@@ -67,7 +67,15 @@ HAR giroscópio (50 Hz), intercalados em blocos de 16, 327 tramas/domínio:
 | GRU gradiente exato (sem tempo) | 0.646 ± 0.001 |
 | **dois tempos (local)** | **0.636 ± 0.001** |
 
-**VEREDICTO PRÉ-REGISTADO (Fila 13): ADVERSÁRIO.** Com busca igual dos
+**EMENDA Nº2 — VEREDICTO: NÓS.** Com a receita anti-bacia (recozimento +
+2 restarts por erro de treino) nos DOIS lados, seleção por validação de 2
+seeds, finais de 5 seeds em teste intocado: **nós 0.632 ± 0.000 vs
+adversário 0.645 ± 0.002** — separação limpa a 1σ, e a regra local ficou
+MAIS estável que o Adam. A fragilidade que perdeu a Fila 13 foi
+diagnosticada (bacias), corrigida, e a revanche ganha sob as mesmas
+regras. Ambos os veredictos ficam no registo.
+
+**VEREDICTO PRÉ-REGISTADO (Fila 13, primeira luta): ADVERSÁRIO.** Com busca igual dos
 dois lados e seleção por validação, o GRU afinado faz 0.645±0.002 e a
 configuração que a NOSSA validação escolheu colapsou no teste
 (0.685±0.017). O claim "batemos o backprop no real" morre aqui. Nota
