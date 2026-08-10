@@ -67,3 +67,13 @@ Compilar e validar:  cc -std=c99 -O2 c/twostroke.c -lm -Ic && ./a.out
 
 Próximos degraus: LUTs para tanh/σ (256 entradas), acumuladores int16/pesos
 int8, e o mesmo ficheiro no ESP32/Arduino.
+
+## Ponto fixo (twostroke_fixed.c): EM CURSO, com anomalia aberta
+
+Estado honesto: a versão float (twostroke.c) está validada a 0.00%. A versão
+Q12+Q20 aprende (0.180→0.077 por janela com lr=0.05 e LUTs cruas) mas, após
+a interpolação das LUTs, os resultados ficaram IDÊNTICOS para taxas de 0.025
+a 0.1 — o sinal vermelho clássico de mecanismo-que-não-dispara desta sessão.
+NÃO CONFIAR nos números do ponto fixo até a anomalia ser explicada. Pistas:
+divisão inteira por zero em ARM devolve 0 sem trap (lr_ns pode estar a
+zerar-se); verificar ns/npr no arranque com s=0 e o caminho do LRQ.
