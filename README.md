@@ -631,7 +631,7 @@ Sem isso, medir a meio do treino altera o treino (custava ~0.02 de NRMSE).
 
 - **A qualidade da previsão não é monótona no número de passagens**, e a
   dispersão entre seeds do modelo float é alta (0.281 ± 0.100). A regra
-  Hebbiana tem taxa fixa e nunca recozimento, por isso continua a oscilar em
+  Hebbiana tem taxa fixa e nunca arrefecimento progressivo, por isso continua a oscilar em
   torno da solução. Testei quatro esquemas de anelagem: os agressivos congelam
   a rede antes de convergir (0.65), o suave empata. `weight_decay` estabiliza
   mas piora o mínimo. Fica por resolver. Entretanto o protocolo de medição

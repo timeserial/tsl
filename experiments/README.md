@@ -67,7 +67,7 @@ HAR giroscópio (50 Hz), intercalados em blocos de 16, 327 tramas/domínio:
 | GRU gradiente exato (sem tempo) | 0.646 ± 0.001 |
 | **dois tempos (local)** | **0.636 ± 0.001** |
 
-**EMENDA Nº2 — VEREDICTO: NÓS.** Com a receita anti-bacia (recozimento +
+**EMENDA Nº2 — VEREDICTO: NÓS.** Com a receita anti-bacia (arrefecimento progressivo +
 2 restarts por erro de treino) nos DOIS lados, seleção por validação de 2
 seeds, finais de 5 seeds em teste intocado: **nós 0.632 ± 0.000 vs
 adversário 0.645 ± 0.002** — separação limpa a 1σ, e a regra local ficou
@@ -88,7 +88,7 @@ de desempenho médio. É o próximo alvo do drawing board.
 Fila 8 (paciência, lr 0.02, 400ép): seeds 0.474/0.438/0.592 → média
 0.501±0.066. DUAS de três seeds abaixo do alvo 0.490 (uma a 0.438) —
 capacidade demonstrada, consistência não: uma seed encalha em má bacia.
-Fila 10 (recozimento, 6 seeds): **0.492 ± 0.037 — paridade com o BPTT
+Fila 10 (arrefecimento progressivo, 6 seeds): **0.492 ± 0.037 — paridade com o BPTT
 (0.490)**; 3/6 seeds abaixo, recorde absoluto do benchmark 0.431 (nosso;
 nada de nenhum tamanho fez melhor — força bruta h64 2-camadas faz
 0.60-0.64, capacidade afoga nesta tarefa). ### Profundidade por empilhamento (agente): compra pouco
@@ -110,11 +110,11 @@ alinhado 0.539±0.099, bloco lr fixo 0.572±0.071, momentum 0.523±0.064,
 todas piores que online 0.492±0.037 em média E variância. A variância
 não é ruído por-trama; é bacia de arranque — não se alisa, salta-se
 (restarts). EMENDA Nº2 PRÉ-REGISTADA: repetir a luta justa real com a
-receita recozimento+restarts-por-treino na seleção e nos finais dos
+receita arrefecimento progressivo+restarts-por-treino na seleção e nos finais dos
 DOIS lados; mesma regra de decisão a 1σ.
 
 **Fila 12, FINAL: 0.466 ± 0.028 — a média da regra local ABAIXO do BPTT
-(0.490), 5/6 seeds, via recozimento + restarts escolhidos pelo erro de
+(0.490), 5/6 seeds, via arrefecimento progressivo + restarts escolhidos pelo erro de
 treino (sem fuga de teste).** Separação ~0.9σ. Com o recorde 0.431, a
 frente sintética fecha: paridade robusta, superioridade média modesta.
 
