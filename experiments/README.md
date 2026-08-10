@@ -67,11 +67,15 @@ HAR giroscópio (50 Hz), intercalados em blocos de 16, 327 tramas/domínio:
 | GRU gradiente exato (sem tempo) | 0.646 ± 0.001 |
 | **dois tempos (local)** | **0.636 ± 0.001** |
 
-No real, o BPTT nem ajuda o GRU — e a regra local de dois tempos ganha a
-ambos. BLINDADO (Fila 9): com o adversário reforçado — h32, 4 seeds,
-taxas alternativas — o melhor GRU faz 0.642±0.003/0.004 e nós 0.636±0.001
-(5 seeds, assentamento fundo). Margem 0.006, ~2σ, consistente. Resta a
-validação que só o mundo pode dar: outros domínios, outras mãos.
+**VEREDICTO PRÉ-REGISTADO (Fila 13): ADVERSÁRIO.** Com busca igual dos
+dois lados e seleção por validação, o GRU afinado faz 0.645±0.002 e a
+configuração que a NOSSA validação escolheu colapsou no teste
+(0.685±0.017). O claim "batemos o backprop no real" morre aqui. Nota
+importante: a configuração fixada a priori (do sintético) continua a
+fazer 0.636 — melhor que qualquer adversário — mas não foi a escolhida
+pelo protocolo, e regra é regra. A lição nua: o défice atual é de
+ROBUSTEZ (sensibilidade a config/seed/split; o GRU+Adam é ±0.002), não
+de desempenho médio. É o próximo alvo do drawing board.
 
 Fila 8 (paciência, lr 0.02, 400ép): seeds 0.474/0.438/0.592 → média
 0.501±0.066. DUAS de três seeds abaixo do alvo 0.490 (uma a 0.438) —
