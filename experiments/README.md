@@ -60,9 +60,10 @@ HAR giroscópio (50 Hz), intercalados em blocos de 16, 327 tramas/domínio:
 | **dois tempos (local)** | **0.636 ± 0.001** |
 
 No real, o BPTT nem ajuda o GRU — e a regra local de dois tempos ganha a
-ambos. Ressalvas: GRUs com 2 seeds e hiperparâmetros do protocolo
-sintético (por afinar de ambos os lados); um conjunto de domínios;
-assentamento fundo em inferência ainda não aplicado aqui.
+ambos. BLINDADO (Fila 9): com o adversário reforçado — h32, 4 seeds,
+taxas alternativas — o melhor GRU faz 0.642±0.003/0.004 e nós 0.636±0.001
+(5 seeds, assentamento fundo). Margem 0.006, ~2σ, consistente. Resta a
+validação que só o mundo pode dar: outros domínios, outras mãos.
 
 Em curso: Fila 8 (sintético: 400ép rumo a 0.490).
 
