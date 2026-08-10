@@ -53,3 +53,17 @@ ponto 2 está correto; um que bata as tramas todas exatamente está a ter sorte.
 
 Se a inferência não couber em C simples com inteiros, não cabe no crossbar.
 Essa é a razão de existir deste passo; ver secção 6 do `CONTEXTO.md`.
+
+
+## Estado (atualizado): a célula de dois tempos JÁ ESTÁ em C
+
+`c/twostroke.c` implementa inferência E aprendizagem da célula rasa portada
+(64→24) em C99 puro: três primitivas (matvec, matvec transposto, escrita
+rank-1 — as três operações nativas do crossbar), zero malloc, ~11 KB.
+Validada contra `c/golden_twostroke.h` (gerado por scripts/gen_golden_c.py):
+uma atualização exata a 3e-8; trajetória de 300 janelas a 0.00% do Python.
+
+Compilar e validar:  cc -std=c99 -O2 c/twostroke.c -lm -Ic && ./a.out
+
+Próximos degraus: LUTs para tanh/σ (256 entradas), acumuladores int16/pesos
+int8, e o mesmo ficheiro no ESP32/Arduino.
