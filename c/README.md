@@ -68,12 +68,22 @@ Compilar e validar:  cc -std=c99 -O2 c/twostroke.c -lm -Ic && ./a.out
 Próximos degraus: LUTs para tanh/σ (256 entradas), acumuladores int16/pesos
 int8, e o mesmo ficheiro no ESP32/Arduino.
 
-## Ponto fixo (twostroke_fixed.c): EM CURSO, com anomalia aberta
+## Ponto fixo (twostroke_fixed.c): VALIDADO — e a história do bug
 
-Estado honesto: a versão float (twostroke.c) está validada a 0.00%. A versão
-Q12+Q20 aprende (0.180→0.077 por janela com lr=0.05 e LUTs cruas) mas, após
-a interpolação das LUTs, os resultados ficaram IDÊNTICOS para taxas de 0.025
-a 0.1 — o sinal vermelho clássico de mecanismo-que-não-dispara desta sessão.
-NÃO CONFIAR nos números do ponto fixo até a anomalia ser explicada. Pistas:
-divisão inteira por zero em ARM devolve 0 sem trap (lr_ns pode estar a
-zerar-se); verificar ns/npr no arranque com s=0 e o caminho do LRQ.
+A anomalia (resultados idênticos em taxas 4x diferentes) foi caçada até à
+raiz e **não estava no C — estava no contrato**: a dinâmica reduzida do
+golden tinha um ponto fixo em zero (s=0 → tanh(0)=0 → prior=0 → todas as
+atualizações nulas). O "treino" validava uma rede congelada; o float que
+"passava a 0.00%" igualava uma trajetória morta, e a versão inteira que
+"falhava" era a única a aprender (a assimetria da LUT tirava o estado do
+zero). Correção: o contrato ganhou a correção sensorial de um passo
+(s ← prior + 0.2·W0ᵀe, saturada) que o assentamento real faz.
+
+Com o juiz acordado: float 0.00%; ponto fixo Q12 (mestres Q20, LUTs de 256
+com interpolação, zero libm) a −0.1% em treino e avaliação com lr=0.1, e
+devidamente sensível à taxa. **A aprendizagem sobrevive aos inteiros** —
+o último degrau de software antes do metal está cumprido.
+
+Lição para o registo: um contrato de validação também é código e também
+mente; um "PASSA" perfeito merece a mesma desconfiança que um resultado
+perfeito.

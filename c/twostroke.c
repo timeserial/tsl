@@ -55,7 +55,10 @@ static float step_learn(const float *x, float lr){
         rank1(G, mg, s, lr/ns, N_TOP, N_TOP);
         for(i=0;i<N_TOP;i++) b[i]+=lr*mg[i];
     }
-    for(i=0;i<N_TOP;i++) s[i]=prior[i];            /* transitar             */
+    /* correção sensorial de um passo (quebra o ponto fixo do zero) */
+    if(lr<=0) matvec_T(W0, e, h, N_IN, N_TOP);
+    for(i=0;i<N_TOP;i++){ float v=prior[i]+0.2f*h[i];
+        if(v>2) v=2; if(v<-2) v=-2; s[i]=v; }
     return mse;
 }
 
