@@ -71,7 +71,21 @@ capacidade demonstrada, consistência não: uma seed encalha em má bacia.
 Fila 10 (recozimento, 6 seeds): **0.492 ± 0.037 — paridade com o BPTT
 (0.490)**; 3/6 seeds abaixo, recorde absoluto do benchmark 0.431 (nosso;
 nada de nenhum tamanho fez melhor — força bruta h64 2-camadas faz
-0.60-0.64, capacidade afoga nesta tarefa). Fila 12 em curso: restarts
+0.60-0.64, capacidade afoga nesta tarefa). ### Profundidade por empilhamento (agente): compra pouco
+
+Pilha de 2 tijolos rasos, interface residual (o de cima explica só o que o
+de baixo deixou): 0.543±0.037 vs 0.564±0.019 do tijolo único (8 seeds) —
+ganho −0.022, 6/8 seeds, ~1.5σ, não significativo a 5%. Interface de
+estado-completo: 1.113 (disputa de crédito, o desastre da via rápida ao
+nível latente). Mecânica: o andar de cima persegue um alvo móvel e o
+resíduo de um tijolo bom já é quase ruído. O backprop compra profundidade
+por coordenação global; a composição local empilha limpa-resíduos. O
+problema do crédito PROFUNDO de 99 continua aberto — a nossa resposta
+continua a ser achatar, não aprofundar. Detalhe de reprodução: o marco
+0.579 exige refresh_device() após atualizações externas de W0.
+Script: experiments/profundidade_empilhamento.py.
+
+Fila 12 em curso: restarts
 escolhidos pelo erro de treino (legítimo) para a consistência.
 
 Banco de suplentes (por ordem de aposta): crédito híbrido acordado-local /
