@@ -41,8 +41,16 @@ tem valeu 0.013). Alvo 0.490 a ~1σ.
 
 Mortos adicionais: RMSProp local (1.09/0.67 — variância amplifica direções
 raras do fluxo intercalado), crédito exato a 2 passos (1.05), topo 48
-(0.63). Alerta aberto: variantes de implementação da mesma regra dão
-0.551 vs 0.579 (~0.03 por explicar); canónico é o conservador.
+(0.63). ~~Alerta aberto: variantes de implementação da mesma regra dão
+0.551 vs 0.579 (~0.03 por explicar)~~ — RESOLVIDO (2026-08-10, bisseção):
+as duas implementações são a mesma regra até à ordem dos arredondamentos
+float32 (1 ulp na transição; W0 idêntico ao bit); o treino amplifica
+caoticamente qualquer ulp (perturbação 1e-6 num peso move uma seed até
++0.15) e 4 seeds não resolvem a distribuição — em seeds 4-9 o intervalo
+INVERTE o sinal e a 10 seeds são indistinguíveis (0.564±0.018 vs
+0.570±0.041, Welch t≈0.5). Leitura correta do marco: 0.579±0.004 (4
+seeds) subestima a variância real por-seed (±0.02-0.04, a lotaria de
+bacias que a receita da Fila 12 resolve).
 
 Sequencial: neurogénese (agente) 0.818±0.046 — recorde, integrada em
 src/pcnet/neurogenesis.py.
