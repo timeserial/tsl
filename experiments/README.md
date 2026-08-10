@@ -34,9 +34,21 @@ todos piores); híbrido acordado/dormir (0.910 — as regras lutam);
 composição por componente W0-clássico+transição-exata (2.08 — diverge:
 duas regras, dois alvos, um W0).
 
-Em curso: RMSProp local (paridade de otimizador com o alvo), crédito exato
-a 2 passos, paridade de épocas, topos largos, chão da tarefa por GRU
-gigante.
+Progressão do conjunto (regra de dois tempos, SGD):
+0.579 (80ép, lr 0.1) → 0.534 (200ép, lr 0.05) → **0.521 ± 0.024** com
+assentamento fundo na inferência (mi=50, θ=0 — a vantagem que o GRU não
+tem valeu 0.013). Alvo 0.490 a ~1σ.
+
+Mortos adicionais: RMSProp local (1.09/0.67 — variância amplifica direções
+raras do fluxo intercalado), crédito exato a 2 passos (1.05), topo 48
+(0.63). Alerta aberto: variantes de implementação da mesma regra dão
+0.551 vs 0.579 (~0.03 por explicar); canónico é o conservador.
+
+Sequencial: neurogénese (agente) 0.818±0.046 — recorde, integrada em
+src/pcnet/neurogenesis.py.
+
+Em curso: Fila 8 (400ép, lr 0.02-0.03, eval mi=100), Fila 7 (multi-mundo
+REAL: ETTm1+HAR acc+HAR gyro, clássica vs dois-tempos vs GRU-0 vs BPTT).
 
 Banco de suplentes (por ordem de aposta): crédito híbrido acordado-local /
 sono-gradiente sobre episódios (pragmático, alta probabilidade, quebra a
