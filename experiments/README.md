@@ -65,7 +65,11 @@ taxas alternativas — o melhor GRU faz 0.642±0.003/0.004 e nós 0.636±0.001
 (5 seeds, assentamento fundo). Margem 0.006, ~2σ, consistente. Resta a
 validação que só o mundo pode dar: outros domínios, outras mãos.
 
-Em curso: Fila 8 (sintético: 400ép rumo a 0.490).
+Fila 8 (paciência, lr 0.02, 400ép): seeds 0.474/0.438/0.592 → média
+0.501±0.066. DUAS de três seeds abaixo do alvo 0.490 (uma a 0.438) —
+capacidade demonstrada, consistência não: uma seed encalha em má bacia.
+Em curso: Fila 10 (recozimento 0.1→0.02, 6 seeds) para a consistência;
+agente a testar profundidade por empilhamento de tijolos rasos.
 
 Banco de suplentes (por ordem de aposta): crédito híbrido acordado-local /
 sono-gradiente sobre episódios (pragmático, alta probabilidade, quebra a
