@@ -97,6 +97,14 @@ continua a ser achatar, não aprofundar. Detalhe de reprodução: o marco
 0.579 exige refresh_device() após atualizações externas de W0.
 Script: experiments/profundidade_empilhamento.py.
 
+**Fila 14 (robustez por suavização): FALHOU nas três formas** — bloco
+alinhado 0.539±0.099, bloco lr fixo 0.572±0.071, momentum 0.523±0.064,
+todas piores que online 0.492±0.037 em média E variância. A variância
+não é ruído por-trama; é bacia de arranque — não se alisa, salta-se
+(restarts). EMENDA Nº2 PRÉ-REGISTADA: repetir a luta justa real com a
+receita recozimento+restarts-por-treino na seleção e nos finais dos
+DOIS lados; mesma regra de decisão a 1σ.
+
 **Fila 12, FINAL: 0.466 ± 0.028 — a média da regra local ABAIXO do BPTT
 (0.490), 5/6 seeds, via recozimento + restarts escolhidos pelo erro de
 treino (sem fuga de teste).** Separação ~0.9σ. Com o recorde 0.431, a
