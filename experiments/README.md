@@ -17,7 +17,7 @@ Por ordem:
    desfaz bom e mau por igual.
 4. ~~Perturbação + dopamina~~ — REINFORCE antitético sobre A diverge (3.63).
 
-## A REGRA DE DOIS TEMPOS (o resultado da sessão)
+## A REGRA DE DOIS TEMPOS — Two-Stroke Learning, TSL (o resultado da sessão)
 
 Creditar do erro em malha aberta retroprojetado (h = W0ᵀ·ε0, cadeia exata
 pelo portão), ANTES de assentar. O assentamento infere; o crédito tira-se

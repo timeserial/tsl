@@ -442,6 +442,8 @@ o vou disfarçar.
 
 ## O ataque ao problema aberto: crédito local vs backprop
 
+(O método resultante foi batizado **Two-Stroke Learning (TSL)** — aprendizagem a dois tempos; a célula/produto é o **TS-1**.)
+
 Depois de dez mecanismos de sistema falharem, a investigação mudou de nível:
 já não "que módulos pôr à volta da regra", mas "o que falta à regra". Dois
 resultados estruturam tudo o que se segue.
