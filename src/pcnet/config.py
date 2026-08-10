@@ -114,6 +114,12 @@ class PCConfig:
     # Traços de elegibilidade na transição portada (e-prop / synaptic
     # tagging): crédito através do tempo com memória por sinapse, sem BPTT.
     eligibility: bool = False
+    # Crítico de 1 bit (frente 4): a atualização local fica provisória; se a
+    # surpresa em malha aberta da trama SEGUINTE exceder este fator vezes a
+    # média móvel, retrai-se — o equivalente da dopamina a dizer "não ajudou".
+    # 0 = desligado. É o remédio para o defeito medido no relé talâmico: a
+    # regra local não sabe quando as suas próprias atualizações se atrapalham.
+    critic_retract: float = 0.0
     # O relé talâmico: o candidato e o portão da transição veem também a
     # trama anterior, em paralelo com o estado recorrente (ver gated.py).
     thalamic: bool = False

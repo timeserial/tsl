@@ -136,6 +136,11 @@ class PCNetwork:
         # latente — o oráculo sai fraco e a conclusão sai errada.
         self.top_clamp: np.ndarray | None = None
 
+        # Crítico de 1 bit: instantâneo dos pesos antes da última
+        # aprendizagem, e média móvel da surpresa para o veto.
+        self._critic_snapshot = None
+        self._critic_ema = 0.0
+
         # Constantes de contabilidade.
         self.macs_down_per_pass = sum(lay.macs_down() for lay in self.layers)
         self.eps_per_pass = sum(sizes)  # um ε por unidade, topo incluído
@@ -467,6 +472,28 @@ class PCNetwork:
         trace = StepTrace()
         trace.target_rms = float(np.sqrt(np.mean(np.square(x))))
 
+        # --- 0. o crítico julga a aprendizagem anterior -----------------
+        # A atualização de t-1 só se prova na previsão de t. Se a surpresa
+        # em malha aberta desta trama exceder o habitual, desfaz-se.
+        if cfg.critic_retract > 0.0 and self._critic_snapshot is not None:
+            pred = self.predict_next()
+            e_now = float(np.mean((x - pred) ** 2))
+            if self._critic_ema > 0.0 and e_now > cfg.critic_retract * self._critic_ema:
+                for lay, W in zip(self.layers, self._critic_snapshot["W"]):
+                    lay.W[:] = W
+                    lay.refresh_device()
+                if self.gated is not None:
+                    self.gated.A[:] = self._critic_snapshot["gA"]
+                    self.gated.G[:] = self._critic_snapshot["gG"]
+                    self.gated.b[:] = self._critic_snapshot["gb"]
+            self._critic_ema = 0.98 * self._critic_ema + 0.02 * e_now
+            self._critic_snapshot = None
+        elif cfg.critic_retract > 0.0:
+            pred = self.predict_next()
+            e_now = float(np.mean((x - pred) ** 2))
+            self._critic_ema = (0.98 * self._critic_ema + 0.02 * e_now
+                                if self._critic_ema > 0.0 else e_now)
+
         # --- 1. a previsão desce ---------------------------------------
         # Cada nível latente recebe duas previsões: a do nível de cima e a do
         # seu próprio passado, à sua escala de tempo. Combinam-se pela
@@ -598,6 +625,15 @@ class PCNetwork:
             trace.iters += 1
 
         # --- 3. aprendizagem local -------------------------------------
+        # O crítico precisa do estado PRÉ-atualização para poder retrair:
+        # o instantâneo tira-se antes de aprender, julga-se na próxima trama.
+        if learn and cfg.critic_retract > 0.0:
+            snap = {"W": [lay.W.copy() for lay in self.layers]}
+            if self.gated is not None:
+                snap["gA"] = self.gated.A.copy()
+                snap["gG"] = self.gated.G.copy()
+                snap["gb"] = self.gated.b.copy()
+            self._critic_snapshot = snap
         if learn and cfg.plasticity_gate > 0.0:
             # Neuromodulação: a plasticidade só abre quando há novidade.
             self._surprise_avg = (0.99 * getattr(self, "_surprise_avg", 0.0)

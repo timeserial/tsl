@@ -7,8 +7,11 @@ localidade com toda a arquitetura igualada. Marcos e história: README raiz.
 Por ordem:
 
 1. ~~Assentamento completo~~ — nulo (0.672/0.664 vs 0.659), re-testado no campeão.
-2. **Intercalação fina** — `frente2_intercalacao.py`, pronto a correr (~40 min).
-   Decide se o preço é do regime de erros ou da regra em si.
+2. ~~Intercalação fina~~ — medida (blocos 16/4/1, alvo re-medido por bloco):
+   o intervalo encolhe (0.084 → 0.057 → 0.013) mas por degradação mútua rumo
+   ao colapso (a bloco 1 ambos ~1.0 — sem continuidade temporal não há
+   tarefa). Miragem; o preço da localidade não se paga pelo ritmo dos dados.
+   Nota menor: intercalação fina magoa o GRU mais do que a nós.
 3. **Crítico de 1 bit** — aplicar a atualização local; se a surpresa da trama
    seguinte subir acima da média móvel, retrair. Dopamina como sinal de
    retração. Por implementar (~30 linhas em network.py).

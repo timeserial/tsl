@@ -357,3 +357,28 @@ def test_fast_path_step_is_scale_invariant():
     small, large = relative_error(1.0), relative_error(100.0)
     assert small < 0.2
     assert large == pytest.approx(small, rel=0.05)
+
+
+def test_the_critic_retracts_a_harmful_update():
+    """Frente 4: a atualização local é provisória até a trama seguinte a
+    validar. Se a surpresa disparar acima do habitual, os pesos voltam ao
+    estado PRÉ-atualização — daí o instantâneo ter de ser tirado antes de
+    aprender (a primeira versão tirava-o depois, e retrair não desfazia nada).
+    """
+    net = small_net(critic_retract=1.05, w_lr=0.5)
+    sig = small_signal(80)
+    net.run(sig.frames[:60], learn=True)  # estabelecer a EMA
+
+    W_before = [lay.W.copy() for lay in net.layers]
+    net.step(sig.frames[60], learn=True)          # aprende (provisório)
+    changed = not all(np.array_equal(a, lay.W)
+                      for a, lay in zip(W_before, net.layers))
+    assert changed
+    W_post_learn = [lay.W.copy() for lay in net.layers]
+
+    net.step(np.full(32, 5.0, dtype=F), learn=False)  # surpresa enorme -> veto
+    reverted = all(np.array_equal(a, lay.W)
+                   for a, lay in zip(W_before, net.layers))
+    kept = all(np.array_equal(a, lay.W)
+               for a, lay in zip(W_post_learn, net.layers))
+    assert reverted and not kept
