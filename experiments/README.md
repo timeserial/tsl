@@ -68,8 +68,11 @@ validação que só o mundo pode dar: outros domínios, outras mãos.
 Fila 8 (paciência, lr 0.02, 400ép): seeds 0.474/0.438/0.592 → média
 0.501±0.066. DUAS de três seeds abaixo do alvo 0.490 (uma a 0.438) —
 capacidade demonstrada, consistência não: uma seed encalha em má bacia.
-Em curso: Fila 10 (recozimento 0.1→0.02, 6 seeds) para a consistência;
-agente a testar profundidade por empilhamento de tijolos rasos.
+Fila 10 (recozimento, 6 seeds): **0.492 ± 0.037 — paridade com o BPTT
+(0.490)**; 3/6 seeds abaixo, recorde absoluto do benchmark 0.431 (nosso;
+nada de nenhum tamanho fez melhor — força bruta h64 2-camadas faz
+0.60-0.64, capacidade afoga nesta tarefa). Fila 12 em curso: restarts
+escolhidos pelo erro de treino (legítimo) para a consistência.
 
 Banco de suplentes (por ordem de aposta): crédito híbrido acordado-local /
 sono-gradiente sobre episódios (pragmático, alta probabilidade, quebra a
