@@ -12,12 +12,19 @@ Por ordem:
    ao colapso (a bloco 1 ambos ~1.0 — sem continuidade temporal não há
    tarefa). Miragem; o preço da localidade não se paga pelo ritmo dos dados.
    Nota menor: intercalação fina magoa o GRU mais do que a nós.
-3. **Crítico de 1 bit** — aplicar a atualização local; se a surpresa da trama
-   seguinte subir acima da média móvel, retrair. Dopamina como sinal de
-   retração. Por implementar (~30 linhas em network.py).
+3. ~~Crítico de 1 bit~~ — implementado (`critic_retract`) e nulo em todas as
+   doses (0.681/0.653/0.659 vs 0.659±0.046). Um bit de retração chega tarde e
+   desfaz bom e mau por igual.
 4. **Perturbação + dopamina** — a aposta de fundo: regra local (enviesada,
    estável) + perturbação de nós (não-enviesada, ruidosa) combinadas como
    estimador com controlo de variância. Por desenhar.
+
+Banco de suplentes (por ordem de aposta): crédito híbrido acordado-local /
+sono-gradiente sobre episódios (pragmático, alta probabilidade, quebra a
+pureza); dendrites segregadas (Guerguiev-Richards, o ataque científico);
+neurogénese por novidade (para o esquecimento); pesadelos ressuscitados no
+substrato certo (slots episódicos discretos, ou Forward-Forward com misturas
+como negativos).
 
 Mortos com causa, não repetir: pesadelos (cego e dirigido), relé talâmico,
 portões espaciais, traços de elegibilidade (neutro), θ↑/θ↓ no treino,
