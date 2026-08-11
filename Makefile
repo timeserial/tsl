@@ -104,6 +104,16 @@ arxiv-check: test-all figures paper ## tudo o que tem de estar verde antes de su
 	@grep -c "±" paper/paper.md >/dev/null && echo "paper: OK"
 	@echo "lembrete: repo público + licença + endorsement (ver conversa)"
 
+.PHONY: mirror
+mirror: ## regenera ../nn-public (histórico SEM patente/ nem paper/)
+	rm -rf ../nn-public
+	git clone -q . ../nn-public
+	cd ../nn-public && $(CURDIR)/.venv/bin/git-filter-repo \
+	  --invert-paths --path patente --path paper --force
+	@echo "espelho em ../nn-public - verificar hashes antes de publicar:"
+	@cd ../nn-public && for h in b69c8f2 32efefe cc25ba9 a42f5b7; do \
+	  git cat-file -t $$h >/dev/null 2>&1 && echo "  $$h OK" || echo "  $$h FALTA"; done
+
 .PHONY: clean
 clean: ## remove artefactos temporários de build
 	rm -rf $(SCRATCH) demo/esp32_surpresa/build .pytest_cache
