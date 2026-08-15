@@ -7,3 +7,8 @@ dist/
 .venv/
 runs/
 .claude/
+
+# cloud credentials and terraform working dirs
+infra/.env
+infra/.terraform/
+infra/*.tfstate*
