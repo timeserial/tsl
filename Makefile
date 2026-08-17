@@ -14,28 +14,28 @@ SCRATCH := $(shell mktemp -d)
 
 # ---------------------------------------------------------------- ambiente
 .PHONY: venv
-venv: ## cria o .venv e instala dependências
+venv: ## create .venv and install dependencies
 	python3 -m venv .venv
 	$(PIP) install -q numpy torch pytest matplotlib
 
 # ---------------------------------------------------------------- testes
 .PHONY: test
-test: ## testes unitários Python (143)
+test: ## Python unit tests (143)
 	$(PY) -m pytest -q
 
 .PHONY: test-c
-test-c: ## contratos C: float (0.0%) e ponto fixo (-0.1%)
+test-c: ## C contracts: float (0.0%) and fixed-point (-0.1%)
 	$(CC) $(CFLAGS) c/twostroke.c -lm -Ic -o $(SCRATCH)/ts_float
 	$(SCRATCH)/ts_float
 	$(CC) $(CFLAGS) c/twostroke_fixed.c -Ic -o $(SCRATCH)/ts_fixed
 	$(SCRATCH)/ts_fixed
 
 .PHONY: test-all
-test-all: test test-c ## tudo o que é rápido e tem de passar sempre
+test-all: test test-c ## everything fast that must always pass
 
 # ---------------------------------------------------------------- reprodução
 .PHONY: repro
-repro: ## reproduz o marco sintético 0.579±0.004 (4 seeds, ~2 min)
+repro: ## reproduce the synthetic milestone 0.579±0.004 (4 seeds, ~2 min)
 	$(PY) -u experiments/profundidade_empilhamento.py --arm brick \
 	  --seeds 0 1 2 3 --epochs 80
 
@@ -105,7 +105,7 @@ arxiv-check: test-all figures paper ## tudo o que tem de estar verde antes de su
 	@echo "lembrete: repo público + licença + endorsement (ver conversa)"
 
 .PHONY: mirror
-mirror: ## regenera ../nn-public (histórico SEM patente/ nem paper/)
+mirror: ## regenerate ../nn-public (history WITHOUT patente/ or paper/)
 	rm -rf ../nn-public
 	git clone -q . ../nn-public
 	cd ../nn-public && $(CURDIR)/.venv/bin/git-filter-repo \
@@ -117,11 +117,11 @@ mirror: ## regenera ../nn-public (histórico SEM patente/ nem paper/)
 	  git cat-file -t $$h >/dev/null 2>&1 && echo "  $$h OK" || echo "  $$h FALTA"; done
 
 .PHONY: clean
-clean: ## remove artefactos temporários de build
+clean: ## remove temporary build artifacts
 	rm -rf $(SCRATCH) demo/esp32_surpresa/build .pytest_cache
 	find . -name __pycache__ -type d -not -path "./.venv/*" -exec rm -rf {} + 2>/dev/null || true
 
 .PHONY: help
-help: ## esta lista
+help: ## this list
 	@grep -E '^[a-zA-Z_-]+:.*?## ' Makefile | sort | \
 	  awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
