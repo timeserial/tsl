@@ -110,7 +110,7 @@ mirror: ## regenera ../nn-public (histórico SEM patente/ nem paper/)
 	git clone -q . ../nn-public
 	cd ../nn-public && $(CURDIR)/.venv/bin/git-filter-repo \
 	  --invert-paths --path patente --path paper \
-	  --path estudo --path infra --path .claude \
+	  --path estudo --path infra \
 	  --path demo/lista_compras.md --path demo/lista_compras.pdf --force
 	@echo "espelho em ../nn-public - verificar hashes antes de publicar:"
 	@cd ../nn-public && for h in b69c8f2 32efefe cc25ba9 a42f5b7; do \
