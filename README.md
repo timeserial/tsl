@@ -503,7 +503,7 @@ target was confirmed. The remaining gap (0.084, ~2σ) is real: the spatial
 phase closed 59% and is not finished.
 
 The gate was the first mechanism out of eleven to lower the ceiling.
-Shortening the hierarchy - the *shallow brain hypothesis*, which has been in since day one - lowered it again, with **fewer
+Shortening the hierarchy - the *shallow brain hypothesis*, in the design since day one - lowered it again, with **fewer
 parameters** (2712 against 3344) and the tightest dispersion of the whole
 session. With no measured cost on the single task.
 
