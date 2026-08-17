@@ -12,3 +12,6 @@ runs/
 infra/.env
 infra/.terraform/
 infra/*.tfstate*
+
+.DS_Store
+.idea/
