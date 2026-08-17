@@ -103,11 +103,11 @@ def eval_adv(m, pairs):
     return float(np.mean(out))
 
 if __name__=="__main__":
-    print("EMENDA 2 - seleção (val médio de 2 seeds, receita anti-bacia nos dois lados)", flush=True)
+    print("AMENDMENT 2 - selection (mean val over 2 seeds, anti-basin recipe on both sides)", flush=True)
     best_o=(9,None)
     for top in (16,24):
         vs=[eval_ours(train_ours(top, mix_sel, sd, 150), val_pairs) for sd in (0,1)]
-        v=float(np.mean(vs)); print(f"  nós topo={top}: val={v:.3f} {vs}", flush=True)
+        v=float(np.mean(vs)); print(f"  us top={top}: val={v:.3f} {vs}", flush=True)
         if v<best_o[0]: best_o=(v,top)
     best_a=(9,None)
     for h in (16,32):
@@ -115,14 +115,14 @@ if __name__=="__main__":
             vs=[eval_adv(train_adv(h,lr,mix_sel,sd), val_pairs) for sd in (0,1)]
             v=float(np.mean(vs)); print(f"  adv h={h} lr={lr}: val={v:.3f} {vs}", flush=True)
             if v<best_a[0]: best_a=(v,(h,lr))
-    print(f"vencedores: nós topo={best_o[1]} | adv {best_a[1]}\n", flush=True)
-    print("FINAIS - 5 seeds, teste intocado", flush=True)
+    print(f"winners: us top={best_o[1]} | adv {best_a[1]}\n", flush=True)
+    print("FINALS - 5 seeds, test untouched", flush=True)
     ours=[eval_ours(train_ours(best_o[1], mix_full, sd, 400), test_pairs) for sd in range(5)]
-    for sd,v in enumerate(ours): print(f"  nós seed={sd}: {v:.3f}", flush=True)
+    for sd,v in enumerate(ours): print(f"  us seed={sd}: {v:.3f}", flush=True)
     h,lr=best_a[1]
     adv=[eval_adv(train_adv(h,lr,mix_full,sd), test_pairs) for sd in range(5)]
     for sd,v in enumerate(adv): print(f"  adv seed={sd}: {v:.3f}", flush=True)
     ro,ra=np.array(ours),np.array(adv)
-    print(f"\nNÓS: {ro.mean():.3f} ± {ro.std():.3f}", flush=True)
-    print(f"ADVERSÁRIO: {ra.mean():.3f} ± {ra.std():.3f}", flush=True)
-    print(f"VEREDICTO: {'NÓS' if ro.mean()+ro.std()<ra.mean()-ra.std() else ('ADVERSÁRIO' if ra.mean()+ra.std()<ro.mean()-ro.std() else 'EMPATE a 1σ')}", flush=True)
+    print(f"\nUS: {ro.mean():.3f} ± {ro.std():.3f}", flush=True)
+    print(f"ADVERSARY: {ra.mean():.3f} ± {ra.std():.3f}", flush=True)
+    print(f"VERDICT: {'US' if ro.mean()+ro.std()<ra.mean()-ra.std() else ('ADVERSARY' if ra.mean()+ra.std()<ro.mean()-ro.std() else 'TIE at 1σ')}", flush=True)

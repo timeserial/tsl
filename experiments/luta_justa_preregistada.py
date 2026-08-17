@@ -78,16 +78,16 @@ def eval_rnn(m, pairs):
             out.append(nrmse(P.numpy(), target))
     return float(np.mean(out))
 
-print(f"FILA 13 - PRÉ-REGISTO: busca igual, seleção por validação ({NV} tramas/domínio), teste intocado\n", flush=True)
-print("=== BUSCA: nosso lado (9 cfg, seed 0, val) ===", flush=True)
+print(f"QUEUE 13 - PRE-REGISTRATION: same search, selection by validation ({NV} frames/domain), test untouched\n", flush=True)
+print("=== SEARCH: our side (9 cfg, seed 0, val) ===", flush=True)
 best_o=(9,None)
 for top in (16,24,32):
     for lr in (0.05,0.1,0.2):
         v=eval_ours(train_ours(top,lr,mix_sel,0), val_tasks)
-        print(f"  topo={top} lr={lr}: val={v:.3f}", flush=True)
+        print(f"  top={top} lr={lr}: val={v:.3f}", flush=True)
         if v<best_o[0]: best_o=(v,(top,lr))
-print(f"vencedor nosso: {best_o}\n", flush=True)
-print("=== BUSCA: adversário (18 cfg, seed 0, val) ===", flush=True)
+print(f"our winner: {best_o}\n", flush=True)
+print("=== SEARCH: adversary (18 cfg, seed 0, val) ===", flush=True)
 best_a=(9,None)
 for cell in ("gru","lstm"):
     for hidden in (16,32,64):
@@ -95,17 +95,17 @@ for cell in ("gru","lstm"):
             v=eval_rnn(train_rnn(cell,hidden,lr,mix_sel,0), val_tasks)
             print(f"  {cell} h={hidden} lr={lr}: val={v:.3f}", flush=True)
             if v<best_a[0]: best_a=(v,(cell,hidden,lr))
-print(f"vencedor adversário: {best_a}\n", flush=True)
-print("=== FINAL: 5 seeds, treino completo, TESTE ===", flush=True)
+print(f"adversary winner: {best_a}\n", flush=True)
+print("=== FINAL: 5 seeds, full training, TEST ===", flush=True)
 top,lr = best_o[1]; ours=[]
 for sd in range(5):
     ours.append(eval_ours(train_ours(top,lr,mix_full,sd), test_tasks))
-    print(f"  nós seed={sd}: {ours[-1]:.3f}", flush=True)
+    print(f"  us seed={sd}: {ours[-1]:.3f}", flush=True)
 cell,hidden,alr = best_a[1]; adv=[]
 for sd in range(5):
     adv.append(eval_rnn(train_rnn(cell,hidden,alr,mix_full,sd), test_tasks))
     print(f"  adv seed={sd}: {adv[-1]:.3f}", flush=True)
 ro,ra=np.array(ours),np.array(adv)
-print(f"\nNÓS ({top},{lr}): {ro.mean():.3f} ± {ro.std():.3f}", flush=True)
-print(f"ADVERSÁRIO ({cell},h{hidden},lr{alr}): {ra.mean():.3f} ± {ra.std():.3f}", flush=True)
-print(f"VEREDICTO: {'NÓS' if ro.mean()+ro.std()<ra.mean()-ra.std() else ('ADVERSÁRIO' if ra.mean()+ra.std()<ro.mean()-ro.std() else 'EMPATE a 1σ')}", flush=True)
+print(f"\nUS ({top},{lr}): {ro.mean():.3f} ± {ro.std():.3f}", flush=True)
+print(f"ADVERSARY ({cell},h{hidden},lr{alr}): {ra.mean():.3f} ± {ra.std():.3f}", flush=True)
+print(f"VERDICT: {'US' if ro.mean()+ro.std()<ra.mean()-ra.std() else ('ADVERSARY' if ra.mean()+ra.std()<ro.mean()-ro.std() else 'TIE at 1σ')}", flush=True)

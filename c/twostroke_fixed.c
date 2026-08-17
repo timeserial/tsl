@@ -101,12 +101,12 @@ int main(void){
         m=step_learn_q(xq,1); mse_tr+=(double)m/ONE/ONE; } mse_tr/=200;
     for(k=200;k<300;k++){ for(i=0;i<N_IN;i++) xq[i]=sat((acc64)(g_frames[k*N_IN+i]*ONE));
         m=step_learn_q(xq,0); mse_ev+=(double)m/ONE/ONE; } mse_ev/=100;
-    printf("PONTO FIXO Q12/Q20, LUTs interpoladas, zero libm no laco\n");
-    printf("  mse treino: C-int=%.6f  float=%.6f  (dif %+.1f%%)\n",
+    printf("FIXED POINT Q12/Q20, interpolated LUTs, zero libm in the loop\n");
+    printf("  mse train: C-int=%.6f  float=%.6f  (diff %+.1f%%)\n",
         mse_tr,(double)G_MSE_TRAIN,100.0*(mse_tr-G_MSE_TRAIN)/G_MSE_TRAIN);
-    printf("  mse aval:   C-int=%.6f  float=%.6f  (dif %+.1f%%)\n",
+    printf("  mse eval:  C-int=%.6f  float=%.6f  (diff %+.1f%%)\n",
         mse_ev,(double)G_MSE_EVAL,100.0*(mse_ev-G_MSE_EVAL)/G_MSE_EVAL);
-    if(mse_ev>1.10*G_MSE_EVAL){ printf("FALHOU: >10%%\n"); return 1; }
-    printf("TUDO OK - a aprendizagem sobrevive aos inteiros.\n");
+    if(mse_ev>1.10*G_MSE_EVAL){ printf("FAILED: >10%%\n"); return 1; }
+    printf("ALL OK - learning survives the integers.\n");
     return 0;
 }

@@ -54,8 +54,8 @@ def gru0(block, seeds=range(3), hidden=16, epochs=150):
         out.append(float(np.mean(sc)))
     return np.array(out)
 
-print("FRENTE 2: o intervalo encolhe com intercalação fina?\n")
-print(f"{'bloco':>6} {'nós':>16} {'GRU-0':>16} {'intervalo':>10}")
+print("FRONT 2: does the gap shrink with fine interleaving?\n")
+print(f"{'block':>6} {'us':>16} {'GRU-0':>16} {'gap':>10}")
 for block in (16, 4, 1):
     o = ours(block); g = gru0(block)
     print(f"{block:>6} {o.mean():>8.3f}±{o.std():.3f} {g.mean():>8.3f}±{g.std():.3f} {o.mean()-g.mean():>10.3f}")

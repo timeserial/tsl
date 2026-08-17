@@ -205,23 +205,23 @@ def stats_block(a, b, la, lb):
     d = (b.mean() - a.mean()) / sp if sp > 0 else float("inf")
     print(f"  {la}: {a.mean():.4f} ± {a.std(ddof=1):.4f}   "
           f"{lb}: {b.mean():.4f} ± {b.std(ddof=1):.4f}", flush=True)
-    print(f"  diff({lb}-{la}) IC95%=[{lo:.4f},{hi:.4f}]  Welch t={t:.2f}  "
+    print(f"  diff({lb}-{la}) CI95%=[{lo:.4f},{hi:.4f}]  Welch t={t:.2f}  "
           f"d={d:.2f}", flush=True)
-    if lo > 0: print(f"  => {la} VENCE (IC exclui 0)", flush=True)
-    elif hi < 0: print(f"  => {lb} VENCE (IC exclui 0)", flush=True)
-    else: print("  => EMPATE (IC contém 0)", flush=True)
+    if lo > 0: print(f"  => {la} WINS (CI excludes 0)", flush=True)
+    elif hi < 0: print(f"  => {lb} WINS (CI excludes 0)", flush=True)
+    else: print("  => TIE (CI contains 0)", flush=True)
 
 if __name__ == "__main__":
     for n, d in DOM: print(d.describe(), flush=True)
     print(f"NTR={NTR} NT={NT} NV={NV}\n", flush=True)
 
-    print("=== SELEÇÃO (val médio de 2 seeds) ===", flush=True)
+    print("=== SELECTION (mean val over 2 seeds) ===", flush=True)
     best_o = (9, None)
     for top in (16, 24):
         vs = [eval_ours(train_ours(top, mix_sel, sd, 150), val_pairs)
               for sd in (0, 1)]
         v = float(np.mean(vs))
-        print(f"  nós topo={top}: val={v:.4f} {[f'{x:.4f}' for x in vs]}", flush=True)
+        print(f"  us top={top}: val={v:.4f} {[f'{x:.4f}' for x in vs]}", flush=True)
         if v < best_o[0]: best_o = (v, top)
     best_a = (9, None)
     for cell in ("gru", "lstm"):
@@ -236,10 +236,10 @@ if __name__ == "__main__":
                    for mu in (0.1, 0.3, 0.5, 1.0)))
     best_esn = min(((eval_esn(lk, rho, 0, val_pairs), (lk, rho))
                     for lk in (0.3, 0.6) for rho in (0.8, 0.95)))
-    print(f"vencedores: nós topo={best_o[1]} | adv {best_a[1]} | "
+    print(f"winners: us top={best_o[1]} | adv {best_a[1]} | "
           f"NLMS mu={best_mu[1]} | ESN {best_esn[1]}\n", flush=True)
 
-    print("=== FINAIS - 20 seeds, teste usado apenas aqui ===", flush=True)
+    print("=== FINALS - 20 seeds, test used only here ===", flush=True)
     ours = [eval_ours(train_ours(best_o[1], mix_full, sd, 400), test_pairs)
             for sd in range(20)]
     for sd, v in enumerate(ours): print(f"  nós seed={sd}: {v:.4f}", flush=True)
@@ -254,8 +254,8 @@ if __name__ == "__main__":
     print(f"  NLMS-AR (mu={best_mu[1]}): {nlms:.4f}", flush=True)
     print(f"  ESN: {np.mean(esn):.4f} ± {np.std(esn, ddof=1):.4f}", flush=True)
 
-    print("\n=== VEREDICTOS (regra: IC bootstrap 95% da diferença) ===", flush=True)
-    stats_block(ours, adv, "NÓS", "ADV")
-    stats_block(ours, esn, "NÓS", "ESN")
-    print(f"  NÓS vs NLMS-AR ({nlms:.4f}) e persistência ({pers:.4f}): "
-          f"determinísticos - comparar com a média e o IC de NÓS.", flush=True)
+    print("\n=== VERDICTS (rule: bootstrap 95% CI of the difference) ===", flush=True)
+    stats_block(ours, adv, "US", "ADV")
+    stats_block(ours, esn, "US", "ESN")
+    print(f"  US vs NLMS-AR ({nlms:.4f}) and persistence ({pers:.4f}): "
+          f"deterministic - compare with the mean and CI of US.", flush=True)

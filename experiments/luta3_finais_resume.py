@@ -19,9 +19,9 @@ from luta3_dados_virgens import (train_ours, eval_ours, train_adv, eval_adv,
 TOP, ADV, MU, ESN_CFG = 16, ("gru", 16, 1e-3), 0.1, (0.3, 0.8)
 
 if __name__ == "__main__":
-    print("LUTA 3 - FINAIS (retoma; seleção registada em luta3_finais.txt)",
+    print("FIGHT 3 - FINALS (resume; selection recorded in luta3_finais.txt)",
           flush=True)
-    print(f"vencedores: nós topo={TOP} | adv {ADV} | NLMS mu={MU} | "
+    print(f"winners: us top={TOP} | adv {ADV} | NLMS mu={MU} | "
           f"ESN {ESN_CFG}\n", flush=True)
     ours = []
     for sd in range(20):
@@ -38,9 +38,9 @@ if __name__ == "__main__":
     print(f"\n  persistência: {pers:.4f}", flush=True)
     print(f"  NLMS-AR (mu={MU}): {nlms:.4f}", flush=True)
     print(f"  ESN: {np.mean(esn):.4f} ± {np.std(esn, ddof=1):.4f}", flush=True)
-    print("\n=== VEREDICTOS (regra: IC bootstrap 95% da diferença) ===",
+    print("\n=== VERDICTS (rule: bootstrap 95% CI of the difference) ===",
           flush=True)
-    stats_block(ours, adv, "NÓS", "ADV")
-    stats_block(ours, esn, "NÓS", "ESN")
-    print(f"  NÓS vs NLMS-AR ({nlms:.4f}) e persistência ({pers:.4f}): "
-          f"determinísticos - comparar com a média e o IC de NÓS.", flush=True)
+    stats_block(ours, adv, "US", "ADV")
+    stats_block(ours, esn, "US", "ESN")
+    print(f"  US vs NLMS-AR ({nlms:.4f}) and persistence ({pers:.4f}): "
+          f"deterministic - compare with the mean and CI of US.", flush=True)

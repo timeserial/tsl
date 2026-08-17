@@ -78,8 +78,8 @@ int main(void){
     m=fmaxf(m,maxdiff(A,g_A_after1,N_TOP*N_TOP));
     m=fmaxf(m,maxdiff(G,g_G_after1,N_TOP*N_TOP));
     m=fmaxf(m,maxdiff(b,g_b_after1,N_TOP));
-    printf("contrato 1 (exatidao 1 passo): maxdiff=%.3g  %s\n",
-           (double)m, m<1e-5f?"OK":"FALHOU");
+    printf("contract 1 (1-step exactness): maxdiff=%.3g  %s\n",
+           (double)m, m<1e-5f?"OK":"FAILED");
     if(m>=1e-5f) return 1;
     /* --- contract 2: aggregate trajectory --------------------------------- */
     load(W0,g_W0_init,N_IN*N_TOP); load(A,g_A_init,N_TOP*N_TOP);
@@ -89,14 +89,14 @@ int main(void){
     mse_tr/=200;
     for(k=200;k<300;k++) mse_ev+=step_learn(&g_frames[k*N_IN], 0.0f);
     mse_ev/=100;
-    printf("contrato 2: mse_treino C=%.6f py=%.6f  (dif %.2f%%)\n",
+    printf("contract 2: mse_train  C=%.6f py=%.6f  (diff %.2f%%)\n",
            (double)mse_tr,(double)G_MSE_TRAIN,
            100.0*fabs(mse_tr-G_MSE_TRAIN)/G_MSE_TRAIN);
-    printf("            mse_aval   C=%.6f py=%.6f  (dif %.2f%%)\n",
+    printf("            mse_eval   C=%.6f py=%.6f  (diff %.2f%%)\n",
            (double)mse_ev,(double)G_MSE_EVAL,
            100.0*fabs(mse_ev-G_MSE_EVAL)/G_MSE_EVAL);
     if(fabs(mse_tr-G_MSE_TRAIN)/G_MSE_TRAIN>0.02) return 2;
     if(fabs(mse_ev-G_MSE_EVAL)/G_MSE_EVAL>0.02) return 3;
-    printf("TUDO OK - a celula de dois tempos cabe em C simples.\n");
+    printf("ALL OK - the two-stroke cell fits in plain C.\n");
     return 0;
 }

@@ -239,7 +239,7 @@ def main() -> int:
         print(f"[{args.arm}] seed {s}: {sc:.4f}  ({time.time()-t0:.0f}s)  "
               f"{json.dumps(extra, default=float) if extra else ''}", flush=True)
     arr = np.array(scores)
-    print(f"[{args.arm}] media {arr.mean():.4f} +- {arr.std():.4f}  "
+    print(f"[{args.arm}] mean {arr.mean():.4f} +- {arr.std():.4f}  "
           f"(seeds {args.seeds})", flush=True)
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)

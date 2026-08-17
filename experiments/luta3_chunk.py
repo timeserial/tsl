@@ -35,17 +35,17 @@ if __name__ == "__main__":
         assert len(ours) == 20 and len(adv) == 20 and len(esn) == 20, \
             (len(ours), len(adv), len(esn))
         from luta3_dados_virgens import stats_block
-        log("\n=== VEREDICTOS (regra: IC bootstrap 95% da diferença) ===")
+        log("\n=== VERDICTS (rule: bootstrap 95% CI of the difference) ===")
         import io, contextlib
-        for a, b, la, lb in [(ours, adv, "NÓS", "ADV"),
-                             (ours, esn, "NÓS", "ESN")]:
+        for a, b, la, lb in [(ours, adv, "US", "ADV"),
+                             (ours, esn, "US", "ESN")]:
             buf = io.StringIO()
             with contextlib.redirect_stdout(buf):
                 stats_block(a, b, la, lb)
             for ln in buf.getvalue().strip().splitlines():
                 log(ln)
-        log(f"  NÓS vs NLMS-AR ({nlms:.4f}) e persistência ({pers:.4f}): "
-            f"determinísticos - comparar com a média e o IC de NÓS.")
+        log(f"  US vs NLMS-AR ({nlms:.4f}) and persistence ({pers:.4f}): "
+            f"deterministic - compare with the mean and CI of US.")
         sys.exit(0)
 
     from luta3_dados_virgens import (train_ours, eval_ours, train_adv,
