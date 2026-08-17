@@ -1,6 +1,6 @@
 # Sparse hierarchical predictive network - Phase 0
 
-Steps 1 and 2 of the plan in `CONTEXTO.md`: a predictive hierarchy of 3
+A predictive hierarchy of 3
 generative layers (64 → 32 → 16 → 8) predicting the next frame of a signal,
 with local learning (no backprop), threshold-based sparsity and early exit;
 then the same weights ternarized to {-1,0,1} and programmed onto a crossbar
@@ -68,8 +68,7 @@ no accuracy; it only costs the accuracy that was being bought with noise.
 
 Caveat: none of this is an energy measurement. It is a count of operations
 and conversions on a machine that is not the right machine. The energy
-argument is only demonstrated on the crossbar (step 4 of the plan); see
-section 6 of `CONTEXTO.md`.
+argument is only demonstrated on the crossbar itself.
 
 ## Step 2 - the substrate (3 seeds, mean ± deviation)
 
@@ -119,7 +118,7 @@ corrects even the device's defects.** What it does not correct is the
 *prediction* of the next frame, and it cannot: that prediction descends
 through the same broken weights before any error exists to guide it.
 Self-correction is not omniscience - and that is exactly why training has to
-happen on the device, as section 6 of `CONTEXTO.md` anticipated. Training on
+happen on the device. Training on
 the crossbar recovers 98% of the degradation at σ_rel = 0.2 and 0.4.
 
 ### There is a cliff, and it is per device
@@ -154,7 +153,7 @@ has to say frame *t+1*. Nobody sees the future, and normalization uses only
 statistics from the training segment.
 
 **Not against an LLM.** An LLM does not solve this problem and this model
-does not solve the LLM's; section 1 of `CONTEXTO.md` explicitly decided not
+does not solve the LLM's - a deliberate design decision was made not
 to compete with transformers on language. Comparing 2752 parameters
 predicting a sensor with a language model is not a hard comparison, it is a
 comparison with no common axis.
@@ -183,7 +182,7 @@ parameters than the AR.
 None of these differences is large. The reading that matters is not the
 order of the table - it is that an architecture designed for other
 constraints, trained without backprop, sits at the level of what exists. It
-is what the strategy of section 1 of `CONTEXTO.md` needs to be true, and it
+is what the strategy of needs to be true, and it
 is the minimum it needed.
 
 ### The toy signal was too easy
@@ -250,7 +249,7 @@ pays off when there is a fast path**, and a lot: it cuts ADC conversions by
 5-8× without losing accuracy. It makes sense - it is only worth estimating a
 channel's reliability when there is more than one channel.
 
-**Fast path** (section 4 of `CONTEXTO.md`, the missing piece) - a short,
+**Fast path** (, the missing piece) - a short,
 always-on path that predicts the next frame directly from the previous one,
 in parallel with the deep hierarchy, in the manner of the cortico-subcortical
 pathways of the *shallow brain hypothesis*:
@@ -287,7 +286,7 @@ ETTm1 (order-4 AR, 0.211) with 2.4× fewer parameters.
 The most revealing number is the iteration count on HAR: **1.2**. The fast
 path explains almost everything, precision correctly discounts what is left,
 and the expensive hierarchy only wakes up when it is really needed. It is
-exactly the mechanism section 4 of `CONTEXTO.md` describes - the always-on
+exactly the mechanism describes - the always-on
 coarse path that only calls the slow circuit when it is not enough - and it
 appeared without being programmed as such: it falls out of the existing
 stopping criterion as soon as there is a fast path lowering the initial
@@ -313,8 +312,7 @@ Something you only see after running the test bench in several places:
 A predictive hierarchy has nothing to gain on a linear problem or on a
 problem with no signal. This is not an excuse, it is a design constraint:
 the step 4 demonstrator has to be chosen with this care, and the claim to
-defend is not "we are more accurate than a transformer" - it is the one
-section 1 of `CONTEXTO.md` had already chosen: **match the accuracy of what
+defend is not "we are more accurate than a transformer" - it is the one already chosen: **match the accuracy of what
 exists, at a fraction of the conversions, in a niche where the transformer
 does not even enter.** On that axis the numbers exist and are above. On the
 pure-accuracy axis, the honest answer right now is "equivalent, not
@@ -337,7 +335,7 @@ Mac.
 ## Continual learning: episodic memory and consolidation
 
 `src/pcnet/episodic.py` implements the missing piece of section 4 of
-`CONTEXTO.md` - the hippocampus and sleep. A fixed-size key-value store,
+the design plan - the hippocampus and sleep. A fixed-size key-value store,
 addressed by the top state (the network's summary of the context), which
 records when there is surprise and is replayed offline to distill into the
 weights.
@@ -505,8 +503,7 @@ target was confirmed. The remaining gap (0.084, ~2σ) is real: the spatial
 phase closed 59% and is not finished.
 
 The gate was the first mechanism out of eleven to lower the ceiling.
-Shortening the hierarchy - the *shallow brain hypothesis*, which has been in
-section 2 of `CONTEXTO.md` since day one - lowered it again, with **fewer
+Shortening the hierarchy - the *shallow brain hypothesis*, which has been in since day one - lowered it again, with **fewer
 parameters** (2712 against 3344) and the tightest dispersion of the whole
 session. With no measured cost on the single task.
 
@@ -681,7 +678,7 @@ cost ~0.02 NRMSE).
   silencing small errors also suppresses the substrate's noise.
 - **The "fast path" does not yet exist as such.** The top transition is its
   poorest form; the confidence gate that decides when to wake the slow path
-  is missing (section 4 of `CONTEXTO.md`).
+  is missing ().
 - **There is no episodic memory or offline consolidation** (section 4).
 
 ## Next steps
