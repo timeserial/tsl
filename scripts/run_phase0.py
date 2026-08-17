@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Passo 1 do plano: valida o protótipo e imprime a instrumentação.
+"""Step 1 of the plan: validates the prototype and prints the instrumentation.
 
     python3 scripts/run_phase0.py [--epochs 60] [--out runs/phase0]
 
-Quatro perguntas, quatro respostas:
+Four questions, four answers:
 
-  1. A dinâmica de assentamento converge?           -> tabela de surpresa/iteração
-  2. A aprendizagem local funciona?                 -> NRMSE vs. linha de base
-  3. O limiar de esparsidade compensa?              -> varrimento de θ
-  4. O compute é proporcional à surpresa?           -> banal vs. evento
+  1. Does the settling dynamics converge?           -> surprise/iteration table
+  2. Does local learning work?                      -> NRMSE vs. baseline
+  3. Does the sparsity threshold pay off?           -> θ sweep
+  4. Is compute proportional to surprise?           -> mundane vs. event
 """
 
 from __future__ import annotations
@@ -46,23 +46,23 @@ def main() -> int:
     net = PCNetwork(cfg)
     results: dict = {"config": asdict(cfg)}
 
-    print(f"hierarquia   {' -> '.join(str(n) for n in cfg.sizes)}")
-    print(f"parâmetros   {sum(W.size for W in net.weights) + net.A.size}")
-    print(f"tramas       {train_sig.n_frames} treino / {test_sig.n_frames} teste"
-          f"  ({cfg.sizes[0]} amostras cada, sem sobreposição)")
+    print(f"hierarchy    {' -> '.join(str(n) for n in cfg.sizes)}")
+    print(f"parameters   {sum(W.size for W in net.weights) + net.A.size}")
+    print(f"frames       {train_sig.n_frames} train / {test_sig.n_frames} test"
+          f"  ({cfg.sizes[0]} samples each, no overlap)")
 
     # ------------------------------------------------------------------
-    rule("2. Aprendizagem local (sem backprop)")
+    rule("2. Local learning (no backprop)")
     baseline = persistence_nrmse(test_sig.frames)
     before = evaluate(net, test_sig.frames)
     history = train(net, train_sig.frames, epochs=args.epochs, eval_frames=test_sig.frames)
     after = history[-1]
 
-    print(f"  NRMSE de previsão da trama seguinte (1.0 = tão bom como prever zero)")
-    print(f"    linha de base (repetir a trama anterior) : {baseline:.3f}")
-    print(f"    rede antes de treinar                    : {before.pred_nrmse:.3f}")
-    print(f"    rede depois de {args.epochs} passagens{' ' * 14}: {after.pred_nrmse:.3f}")
-    verdict = "aprendeu" if after.pred_nrmse < min(baseline, before.pred_nrmse) else "NÃO aprendeu"
+    print(f"  Next-frame prediction NRMSE (1.0 = as good as predicting zero)")
+    print(f"    baseline (repeat previous frame)         : {baseline:.3f}")
+    print(f"    network before training                  : {before.pred_nrmse:.3f}")
+    print(f"    network after {args.epochs} passes    {' ' * 14}: {after.pred_nrmse:.3f}")
+    verdict = "learned" if after.pred_nrmse < min(baseline, before.pred_nrmse) else "did NOT learn"
     print(f"    -> {verdict}")
     results["learning"] = {
         "baseline_persistence_nrmse": baseline,
@@ -72,7 +72,7 @@ def main() -> int:
     }
 
     # ------------------------------------------------------------------
-    rule("1. Convergência da dinâmica de assentamento")
+    rule("1. Convergence of the settling dynamics")
     traces = net.run(test_sig.frames, learn=False, reset=True)
     max_len = max(len(t.surprise) for t in traces)
     curve = [
@@ -89,27 +89,27 @@ def main() -> int:
         for k in range(max_len)
     ]
     table(rows, ["iter", "surpresa", "vs_iter0", "tramas_vivas"])
-    print("  (a média de cada linha é sobre as tramas ainda vivas, que são cada vez")
-    print("   menos — por isso a coluna pode subir sem que nenhuma trama piore.)")
-    # A monotonia tem de ser verificada trama a trama. A última avaliação pode
-    # subir: é justamente essa subida que faz o critério de ganho parar o laço.
+    print("  (each row's mean is over the frames still alive, which are fewer and")
+    print("   fewer, so the column can rise without any single frame getting worse.)")
+    # Monotonicity has to be checked frame by frame. The last evaluation can
+    # rise: it is exactly that rise that makes the gain criterion stop the loop.
     monotone = sum(
         1
         for t in traces
         if all(t.surprise[k + 1] <= t.surprise[k] + 1e-9
                for k in range(len(t.surprise) - 2))
     )
-    print(f"  tramas com energia monótona decrescente: {monotone}/{len(traces)}")
-    print(f"  energia final / inicial (média): "
+    print(f"  frames with monotonically decreasing energy: {monotone}/{len(traces)}")
+    print(f"  final / initial energy (mean): "
           f"{np.mean([t.final_surprise / max(t.open_loop_surprise, 1e-12) for t in traces]):.3f}")
     reasons = {r: sum(1 for t in traces if t.exit_reason == r) for r in
                (EXIT_EXPLAINED, EXIT_STALLED, EXIT_CEILING)}
-    print(f"  saídas: " + ", ".join(f"{k}={v}" for k, v in reasons.items()))
+    print(f"  exits: " + ", ".join(f"{k}={v}" for k, v in reasons.items()))
     results["settling"] = {"surprise_curve": curve, "monotone_frames": monotone,
                            "n_frames": len(traces), "exit_reasons": reasons}
 
     # ------------------------------------------------------------------
-    rule("3. Limiar de esparsidade: quanto custa o silêncio")
+    rule("3. Sparsity threshold: what silence costs")
     sweep = theta_sweep(net, test_sig.frames, THETAS)
     rows = []
     for th, s in sweep.items():
@@ -124,20 +124,20 @@ def main() -> int:
         })
     table(rows, ["θ", "NRMSE", "silenciados_%", "ADC_%", "MACs_sobem_%", "iters",
                  "explicado_%"])
-    print("  ADC_% = conversões feitas / conversões de uma rede densa a correr sempre")
-    print(f"          até ao teto ({cfg.max_iters + 1} passagens × {net.eps_per_pass} unidades).")
-    print("          É este o número que decide o orçamento energético no crossbar.")
+    print("  ADC_% = conversions made / conversions of a dense network always running")
+    print(f"          to the ceiling ({cfg.max_iters + 1} passes × {net.eps_per_pass} units).")
+    print("          This is the number that decides the energy budget on the crossbar.")
     results["theta_sweep"] = {str(th): s.as_row() for th, s in sweep.items()}
 
     # ------------------------------------------------------------------
-    rule("4. Compute proporcional à surpresa")
+    rule("4. Compute proportional to surprise")
     ev = make_signal(n_frames=200, frame_len=cfg.sizes[0], seed=args.seed + 99,
                      n_events=12)
     ev_traces = net.run(ev.frames, learn=False, reset=True)
     mask = np.zeros(len(ev_traces), dtype=bool)
     mask[ev.event_frames] = True
     rows = []
-    for label, sel in (("banal", ~mask), ("com transitório", mask)):
+    for label, sel in (("mundane", ~mask), ("with transient", mask)):
         sub = [t for t, m in zip(ev_traces, sel) if m]
         rows.append({
             "tramas": label,
@@ -148,11 +148,11 @@ def main() -> int:
         })
     table(rows, ["tramas", "n", "surpresa", "iters", "conversões_ADC"])
     ratio = rows[1]["conversões_ADC"] / max(rows[0]["conversões_ADC"], 1e-9)
-    print(f"  uma trama surpreendente custa {ratio:.1f}× uma trama banal")
+    print(f"  a surprising frame costs {ratio:.1f}× a mundane one")
     results["surprise_scaling"] = {"rows": rows, "adc_ratio": ratio}
 
     # ------------------------------------------------------------------
-    rule("Artefactos")
+    rule("Artifacts")
     out = args.out
     save_npz(out / "model.npz", net)
     write_c_header(out / "model.h", net)

@@ -1,8 +1,8 @@
-/* Celula de dois tempos em PONTO FIXO - o degrau final antes do metal.
- * Sinais e sombra: int16 Q12. Mestres de aprendizagem: int32 Q20 (a
- * plasticidade fina acumula 8 bits abaixo do que o compute ve). LUTs de
- * 256 entradas com interpolacao linear; ZERO libm no laco.
- * Contrato: MSE de treino e avaliacao a <10% do float no mesmo percurso. */
+/* Two-stroke cell in FIXED POINT - the final rung before the metal.
+ * Signals and shadow: int16 Q12. Learning masters: int32 Q20 (the fine
+ * plasticity accumulates 8 bits below what the compute sees). 256-entry
+ * LUTs with linear interpolation; ZERO libm in the loop.
+ * Contract: training and evaluation MSE within <10% of float on the same path. */
 #include <stdio.h>
 #include "golden_twostroke.h"
 
@@ -64,7 +64,7 @@ static long step_learn_q(const q12 *x, int learn){
     matvec_q(W0, pr16, pred, N_IN, N_TOP);
     for(i=0;i<N_IN;i++){ e[i]=(acc64)x[i]-pred[i]; e16[i]=sat(e[i]); mse+=e[i]*e[i]; }
     mse/=N_IN;
-    matvec_qT(W0, e16, h, N_IN, N_TOP);   /* leitura transposta (sempre) */
+    matvec_qT(W0, e16, h, N_IN, N_TOP);   /* transposed read (always) */
     if(learn){
         for(i=0;i<N_TOP;i++){ ns+=(acc64)s[i]*s[i]; npr+=(acc64)pr16[i]*pr16[i]; }
         ns=(ns>>Q)+4; npr=(npr>>Q)+4;                     /* Q12 + eps */
@@ -81,7 +81,7 @@ static long step_learn_q(const q12 *x, int learn){
             bm[i]=satm(bm[i]+((LRQ*mg)>>4)); }
         refresh();
     }
-    /* correcao sensorial de um passo (quebra o ponto fixo do zero) */
+    /* one-step sensory correction (breaks the fixed point at zero) */
     for(i=0;i<N_TOP;i++){ v=prior[i]+(((acc64)(0.2*ONE)*h[i])>>Q);
         if(v>2*ONE) v=2*ONE; if(v<-2*ONE) v=-2*ONE; s[i]=(q12)v; }
     return (long)mse;

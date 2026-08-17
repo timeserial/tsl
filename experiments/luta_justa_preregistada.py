@@ -20,8 +20,8 @@ def interleave(n):
     nb=n//block
     return np.concatenate([t[0][b*block:(b+1)*block] for b in range(nb) for t in tr_tasks]) if n==NT else \
            np.concatenate([tr[:n][b*block:(b+1)*block] for b in range(nb) for tr,_ in test_tasks])
-mix_sel = interleave(NT)      # treino p/ seleção
-mix_full = interleave(NTR)    # treino p/ final
+mix_sel = interleave(NT)      # training for selection
+mix_full = interleave(NTR)    # training for the final
 
 def eval_ours(net, pairs):
     out=[]
@@ -78,7 +78,7 @@ def eval_rnn(m, pairs):
             out.append(nrmse(P.numpy(), target))
     return float(np.mean(out))
 
-print(f"FILA 13 — PRÉ-REGISTO: busca igual, seleção por validação ({NV} tramas/domínio), teste intocado\n", flush=True)
+print(f"FILA 13 - PRÉ-REGISTO: busca igual, seleção por validação ({NV} tramas/domínio), teste intocado\n", flush=True)
 print("=== BUSCA: nosso lado (9 cfg, seed 0, val) ===", flush=True)
 best_o=(9,None)
 for top in (16,24,32):

@@ -1,34 +1,36 @@
-"""Várias dinâmicas, escolhidas pelo contexto.
+"""Several dynamics, chosen by context.
 
-Diagnóstico que levou aqui, e vale a pena tê-lo escrito: com uma só matriz de
-transição no topo, a rede não consegue reter várias tarefas — nem quando as vê
-todas ao mesmo tempo, nem com o dobro dos parâmetros (medido: 6848 -> 13824
-parâmetros muda o resultado de 0.823 para 0.825, ou seja, nada).
+The diagnosis that led here, and it is worth having it written down: with a
+single transition matrix at the top, the network cannot retain several tasks -
+not even when it sees them all at once, nor with twice the parameters
+(measured: 6848 -> 13824 parameters changes the result from 0.823 to 0.825,
+that is, nothing).
 
-A razão é estrutural e não de tamanho. Uma matriz linear tem *um* conjunto de
-valores próprios, logo um conjunto de frequências de rotação. Duas tarefas com
-avanços de fase diferentes puxam-na para uma média que não serve nenhuma. Em
-princípio uma matriz 8×8 tem quatro pares de valores próprios e podia alojar
-quatro dinâmicas em subespaços ortogonais — mas nada na regra local encoraja
-essa separação, e por isso ela não acontece.
+The reason is structural, not one of size. A linear matrix has *one* set of
+eigenvalues, hence one set of rotation frequencies. Two tasks with different
+phase advances pull it toward an average that serves neither. In principle an
+8×8 matrix has four pairs of eigenvalues and could host four dynamics in
+orthogonal subspaces - but nothing in the local rule encourages that
+separation, and so it does not happen.
 
-A solução é dar-lhe *várias* dinâmicas e um mecanismo para escolher:
+The solution is to give it *several* dynamics and a mechanism to choose:
 
     ẑ_L(t) = f( Σ_k g_k · A_k · z_L(t-1) )      g = softmax(sim(z, c_k) / τ)
 
-Cada componente tem a sua matriz `A_k` e o seu protótipo de contexto `c_k`. O
-protótipo diz "esta dinâmica aplica-se quando o mundo se parece com isto"; a
-responsabilidade `g_k` mede quanto se parece. É um sistema dinâmico linear
-comutado, e é dos modelos mais antigos e mais bem estudados para sinais com
-vários regimes.
+Each component has its own matrix `A_k` and its own context prototype `c_k`.
+The prototype says "this dynamics applies when the world looks like this";
+the responsibility `g_k` measures how much it does. It is a switched linear
+dynamical system, and it is among the oldest and best studied models for
+signals with several regimes.
 
-Continua tudo local. `A_k` aprende com o mesmo erro de sempre, pesado pela sua
-responsabilidade — quem foi responsável pela previsão é quem paga pelo erro.
-`c_k` segue a média dos contextos em que foi usado, que é k-médias online.
+Everything is still local. `A_k` learns from the same error as always,
+weighted by its responsibility - whoever was responsible for the prediction
+is who pays for the error. `c_k` follows the mean of the contexts in which it
+was used, which is online k-means.
 
-E encaixa na memória episódica em vez de competir com ela: os protótipos são
-chaves, a responsabilidade é a recuperação. Saber *em que mundo se está* passa
-a ser a mesma operação que reconhecer um contexto.
+And it fits with episodic memory instead of competing with it: the prototypes
+are keys, the responsibility is the retrieval. Knowing *which world you are
+in* becomes the same operation as recognizing a context.
 """
 
 from __future__ import annotations
@@ -39,7 +41,7 @@ from .dtypes import F
 
 
 class TopMixture:
-    """Mistura de transições lineares no topo, com selector por contexto."""
+    """Mixture of linear transitions at the top, with a context selector."""
 
     __slots__ = ("n", "k", "A", "protos", "tau", "_resp", "_z_prev", "a")
 
@@ -47,14 +49,14 @@ class TopMixture:
         self.n = int(n)
         self.k = max(1, int(k))
         self.tau = float(tau)
-        # Cada componente arranca perto da identidade com uma perturbação
-        # diferente: idênticas colapsariam para a mesma solução.
+        # Each component starts near the identity with a different
+        # perturbation: identical ones would collapse to the same solution.
         self.A = np.stack([
             np.eye(n, dtype=F)
             + (rng.standard_normal((n, n)) * (0.15 / np.sqrt(n))).astype(F)
             for _ in range(self.k)
         ])
-        # Protótipos de contexto, aleatórios e normalizados.
+        # Context prototypes, random and normalized.
         p = rng.standard_normal((self.k, n)).astype(F)
         self.protos = p / np.maximum(np.linalg.norm(p, axis=1, keepdims=True), 1e-8)
         self._resp = np.full(self.k, 1.0 / self.k, dtype=F)
@@ -71,7 +73,7 @@ class TopMixture:
         return self._resp
 
     def responsibility(self, z_prev: np.ndarray) -> np.ndarray:
-        """Quanto é que cada dinâmica se aplica ao contexto atual."""
+        """How much each dynamics applies to the current context."""
         if self.k == 1:
             self._resp[:] = 1.0
             return self._resp
@@ -85,7 +87,7 @@ class TopMixture:
         return self._resp
 
     def predict(self, z_prev: np.ndarray) -> np.ndarray:
-        """Σ_k g_k · A_k · z(t-1). Devolve a pré-ativação."""
+        """Σ_k g_k · A_k · z(t-1). Returns the pre-activation."""
         g = self.responsibility(z_prev)
         self._z_prev[:] = z_prev
         np.dot(np.tensordot(g, self.A, axes=(0, 0)), z_prev, out=self.a)
@@ -93,11 +95,12 @@ class TopMixture:
 
     def learn(self, eps_mod: np.ndarray, lr: float, proto_lr: float = 0.02,
               grad_clip: float = 0.0) -> None:
-        """Quem foi responsável pela previsão é quem paga pelo erro.
+        """Whoever was responsible for the prediction is who pays for the error.
 
-        ΔA_k ∝ g_k · ε ⊗ z(t-1), e o protótipo segue a média dos contextos em
-        que a sua componente foi usada. Passo normalizado por ‖z‖², pela mesma
-        razão de sempre: uma regra delta só é estável abaixo de 1/‖x‖².
+        ΔA_k ∝ g_k · ε ⊗ z(t-1), and the prototype follows the mean of the
+        contexts in which its component was used. Step normalized by ‖z‖²,
+        for the same reason as always: a delta rule is only stable below
+        1/‖x‖².
         """
         z = self._z_prev
         norm = float(np.dot(z, z)) + 1e-6
@@ -108,14 +111,14 @@ class TopMixture:
             g = float(self._resp[i])
             if g > 1e-4:
                 self.A[i] += F(lr * g) * outer
-                # k-médias online: o protótipo aproxima-se do contexto em que
-                # foi usado, na proporção em que foi usado.
+                # online k-means: the prototype moves toward the context in
+                # which it was used, in proportion to how much it was used.
                 self.protos[i] += F(proto_lr * g) * (z - self.protos[i])
         n = np.linalg.norm(self.protos, axis=1, keepdims=True)
         self.protos /= np.maximum(n, 1e-8)
 
     def sigma_max(self) -> float:
-        """Maior valor singular da mistura efetiva corrente."""
+        """Largest singular value of the current effective mixture."""
         mixed = np.tensordot(self._resp, self.A, axes=(0, 0))
         return float(np.linalg.svd(mixed, compute_uv=False)[0])
 

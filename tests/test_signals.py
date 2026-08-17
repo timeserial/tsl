@@ -52,5 +52,5 @@ def test_persistence_baseline_is_a_real_baseline():
     sig = make_signal(n_frames=50, seed=1)
     nrmse = persistence_nrmse(sig.frames)
     assert np.isfinite(nrmse) and nrmse > 0
-    # Tramas não sobrepostas de um sinal oscilante: repetir a anterior é mau.
+    # Non-overlapping frames of an oscillating signal: repeating the previous one is bad.
     assert nrmse > 0.5

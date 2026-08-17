@@ -1,4 +1,4 @@
-"""Passo 2: o substrato. Ternarização, variabilidade, ruído, ADC."""
+"""Step 2: the substrate. Ternarization, variability, noise, ADC."""
 
 import numpy as np
 import pytest
@@ -29,7 +29,7 @@ def trained(device=None, seed=0, epochs=25):
 
 
 # --------------------------------------------------------------------------
-# ternarização
+# ternarization
 # --------------------------------------------------------------------------
 def test_ternary_weights_take_three_values():
     W = np.random.default_rng(0).standard_normal((16, 8)).astype(F)
@@ -43,7 +43,7 @@ def test_ternary_approximates_the_float_weights():
     W = np.random.default_rng(1).standard_normal((32, 16)).astype(F)
     T, scale = ternarize(W)
     err = np.linalg.norm(W - T * scale) / np.linalg.norm(W)
-    assert err < 0.6  # 3 valores por peso não fazem milagres, mas seguem o sinal
+    assert err < 0.6  # 3 values per weight work no miracles, but they track the sign
     assert np.all(np.sign(T)[T != 0] == np.sign(W)[T != 0])
 
 
@@ -54,7 +54,7 @@ def test_higher_threshold_zeroes_more_devices():
 
 
 def test_per_row_scale_beats_a_single_global_gain():
-    """Linhas com escalas muito diferentes: um ganho só não chega."""
+    """Rows with very different scales: a single gain is not enough."""
     rng = np.random.default_rng(3)
     W = rng.standard_normal((8, 16)).astype(F)
     W[:4] *= 100.0
@@ -72,18 +72,18 @@ def test_all_zero_weights_do_not_produce_nan():
 
 
 # --------------------------------------------------------------------------
-# o crossbar
+# the crossbar
 # --------------------------------------------------------------------------
 def test_programming_variability_is_static_not_noise():
-    """O desvio de cada dispositivo é amostrado uma vez. Programar duas vezes
-    os mesmos pesos tem de dar exatamente o mesmo crossbar."""
+    """Each device's deviation is sampled once. Programming the same weights
+    twice has to yield exactly the same crossbar."""
     W = np.random.default_rng(4).standard_normal((16, 8)).astype(F)
     arr = AnalogArray(W.shape, DeviceModel(sigma_rel=0.2, sigma_abs=0.01), seed=0)
     assert np.array_equal(arr.program(W), arr.program(W))
 
 
 def test_read_noise_is_dynamic():
-    """O ruído de leitura, esse, muda a cada MAC."""
+    """Read noise, on the other hand, changes on every MAC."""
     arr = AnalogArray((16, 8), DeviceModel(read_sigma=0.1), seed=0)
     out = np.ones(16, dtype=F)
     assert not np.array_equal(arr.read(out.copy()), arr.read(out.copy()))
@@ -136,13 +136,14 @@ def test_more_adc_bits_means_less_error(bits):
 
 
 # --------------------------------------------------------------------------
-# integração com a rede
+# integration with the network
 # --------------------------------------------------------------------------
 def test_attach_and_detach_restores_the_float_network():
-    """Os pesos voltam exatamente; o agregado volta a menos de um epsilon.
+    """The weights come back exactly; the aggregate comes back to within an epsilon.
 
-    Trama a trama não volta, e isso é uma propriedade do sistema, não um bug —
-    ver `test_exit_decision_is_chaotic_but_aggregates_are_stable`.
+    Frame by frame it does not come back, and that is a property of the
+    system, not a bug - see
+    `test_exit_decision_is_chaotic_but_aggregates_are_stable`.
     """
     net = trained()
     sig = small_signal(60)
@@ -173,13 +174,13 @@ def test_learning_updates_the_float_shadow_and_reprograms_the_crossbar():
     W_dev = net.layers[0].W_eff.copy()
     net.run(small_signal(40).frames, learn=True)
 
-    assert not np.array_equal(W_float, net.weights[0])  # o shadow moveu-se
-    assert not np.array_equal(W_dev, net.layers[0].W_eff)  # o crossbar seguiu
+    assert not np.array_equal(W_float, net.weights[0])  # the shadow moved
+    assert not np.array_equal(W_dev, net.layers[0].W_eff)  # the crossbar followed
     assert set(np.unique(np.sign(net.layers[0].W_eff)).tolist()) <= {-1.0, 0.0, 1.0}
 
 
 def test_training_on_the_crossbar_beats_quantising_at_the_end():
-    """A afirmação principal do passo 2: QAT >> PTQ."""
+    """The main claim of step 2: QAT >> PTQ."""
     sig = small_signal(300)
     tr, te = sig.split(0.8)
 
@@ -197,7 +198,7 @@ def test_training_on_the_crossbar_beats_quantising_at_the_end():
 
 
 # --------------------------------------------------------------------------
-# estabilidade
+# stability
 # --------------------------------------------------------------------------
 def test_power_iteration_matches_the_true_largest_singular_value():
     net = trained(device=TERNARY)
@@ -207,8 +208,8 @@ def test_power_iteration_matches_the_true_largest_singular_value():
 
 
 def test_changing_device_re_estimates_sigma_max():
-    """Uma só iteração de potência subestima σ_max ao trocar de crossbar — e um
-    σ_max subestimado dá um passo grande demais. Foi assim que divergiu."""
+    """A single power iteration underestimates σ_max when swapping crossbars,
+    and an underestimated σ_max gives too large a step. That is how it diverged."""
     net = trained(device=TERNARY)
     net.attach_device(DeviceModel(ternary=True, sigma_rel=0.5, seed=3))
     for lay in net.layers:
@@ -231,12 +232,12 @@ def test_fixed_step_can_be_forced_back_on():
 
 
 # --------------------------------------------------------------------------
-# um facto estrutural que custou a descobrir
+# a structural fact that was hard to discover
 # --------------------------------------------------------------------------
 def test_settling_budget_below_the_depth_predicts_nothing():
-    """O erro sensorial sobe um nível por iteração. Com menos iterações do que
-    níveis, o topo nunca é corrigido, nunca sai de zero, e a rede prevê zero —
-    o que a torna exatamente tão boa como não existir (NRMSE 1.0)."""
+    """The sensory error climbs one level per iteration. With fewer iterations
+    than levels, the top is never corrected, never leaves zero, and the network
+    predicts zero - which makes it exactly as good as not existing (NRMSE 1.0)."""
     sig = small_signal(300)
     tr, te = sig.split(0.8)
     depth = len(SMALL["sizes"]) - 1
@@ -251,16 +252,17 @@ def test_settling_budget_below_the_depth_predicts_nothing():
 
 
 def test_exit_decision_is_chaotic_but_aggregates_are_stable():
-    """Uma perturbação ínfima no passo muda tramas individuais, não a média.
+    """A tiny perturbation in the step changes individual frames, not the mean.
 
-    O critério de saída é uma decisão discreta: uma diferença de 1e-4 no passo
-    de assentamento chega para o laço parar uma iteração antes ou depois, e uma
-    iteração muda o estado do topo, que atravessa para a trama seguinte. Daí
-    que 0.01% de diferença no passo dê ~0.1 de diferença numa trama concreta.
+    The exit criterion is a discrete decision: a difference of 1e-4 in the
+    settling step is enough for the loop to stop one iteration earlier or
+    later, and one iteration changes the state of the top, which carries over
+    into the next frame. Hence a 0.01% difference in the step yields ~0.1 of
+    difference on a specific frame.
 
-    Consequência prática, e é por isso que este teste existe: validar o
-    inferidor em C trama a trama, ou pelo nº de iterações, é validar ruído. O
-    que se compara são agregados e tolerâncias.
+    The practical consequence, and the reason this test exists: validating the
+    C inference engine frame by frame, or by the number of iterations, is
+    validating noise. What gets compared are aggregates and tolerances.
     """
     sig = small_signal(300)
     tr, te = sig.split(0.8)

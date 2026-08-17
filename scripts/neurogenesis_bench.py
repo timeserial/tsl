@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Benchmark da neurogénese por novidade no protocolo sequencial de 3 tarefas.
+"""Benchmark of novelty-driven neurogenesis on the sequential 3-task protocol.
 
     python3 scripts/neurogenesis_bench.py --variant neuro --sizes deep
 
-Protocolo fixo (o mesmo dos marcos): make_tasks(3, 64, 400, seed=1),
-40 épocas por tarefa, treino tarefa a tarefa sem revisitar, avaliação com
-evaluate_task no fim de cada tarefa. Config campeã:
-PCConfig(seed=s, fast_path=False, use_precision=True, metaplasticity opcional).
+Fixed protocol (the same as the milestones): make_tasks(3, 64, 400, seed=1),
+40 epochs per task, task-by-task training with no revisiting, evaluation with
+evaluate_task at the end of each task. Champion config:
+PCConfig(seed=s, fast_path=False, use_precision=True, optional metaplasticity).
 """
 
 from __future__ import annotations
@@ -66,7 +66,7 @@ def run_seq(variant: str, seed: int, sizes, rule: str = "min",
 
 
 def run_joint(seed: int, sizes) -> dict:
-    """Teto: treino conjunto intercalado em blocos de 16 (como em continual.py)."""
+    """Ceiling: joint training interleaved in blocks of 16 (as in continual.py)."""
     net = PCNetwork(PCConfig(seed=seed, fast_path=False, use_precision=True,
                              sizes=sizes))
     block = 16

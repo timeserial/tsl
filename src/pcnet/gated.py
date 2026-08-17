@@ -1,40 +1,40 @@
-"""Transição temporal com portões: a dinâmica escolhida pelo erro.
+"""Gated temporal transition: the dynamics chosen by the error.
 
-De onde isto vem, porque é a decomposição mais importante que medimos: um GRU
-proibido de atribuir crédito através do tempo (estado destacado a cada passo)
-faz 0.576 nas três tarefas onde nós fazemos 0.778 e o BPTT completo faz 0.490.
-Ou seja, a maior parte do muro não está no tempo — está no que a atualização
-faz com o erro de *um* instante. E a única diferença estrutural relevante da
-célula dele é o **portão multiplicativo**: decidir, em função do contexto,
-quanto de cada unidade de estado atualizar, com o crédito a fluir através
-dessa decisão.
+Where this comes from, because it is the most important decomposition we
+measured: a GRU forbidden from assigning credit through time (state detached
+at every step) scores 0.576 on the three tasks where we score 0.778 and full
+BPTT scores 0.490. In other words, most of the wall is not in time - it is in
+what the update does with the error of *one* instant. And the only relevant
+structural difference in its cell is the **multiplicative gate**: deciding,
+as a function of context, how much of each state unit to update, with credit
+flowing through that decision.
 
-As nossas tentativas anteriores de modularidade falharam exatamente por não
-terem isto: a mistura de dinâmicas escolhia por semelhança (k-médias, sem
-crédito), a esparsidade cortava por magnitude (cega ao erro). O portão do GRU
-é escolhido *pelo erro*. E multiplicação entre sinais não é truque de
-engenharia — inibição shunting, gating dendrítico, o tálamo a portar o córtex:
-é dos mecanismos mais documentados da neurofisiologia.
+Our previous attempts at modularity failed precisely for lacking this: the
+mixture of dynamics chose by similarity (k-means, no credit), sparsity cut by
+magnitude (blind to the error). The GRU's gate is chosen *by the error*. And
+multiplication between signals is no engineering trick - shunting inhibition,
+dendritic gating, the thalamus gating the cortex: it is among the best
+documented mechanisms in neurophysiology.
 
-A transição do topo passa de
+The top's transition goes from
 
-    ẑ(t) = (1-λ)·z + λ·tanh(A·z)          λ fixo, igual para tudo
+    ẑ(t) = (1-λ)·z + λ·tanh(A·z)          λ fixed, the same for everything
 
-para a versão em que λ é aprendido e depende do contexto:
+to the version where λ is learned and depends on the context:
 
-    c = tanh(A·z)                          o candidato (a dinâmica)
-    g = σ(G·z + b)                         o portão (quanto atualizar)
+    c = tanh(A·z)                          the candidate (the dynamics)
+    g = σ(G·z + b)                         the gate (how much to update)
     ẑ(t) = (1-g)⊙z + g⊙c
 
-O crédito é local na mesma. Com ε = z_assentado − ẑ vindo do assentamento:
+Credit is still local. With ε = z_settled − ẑ coming from settling:
 
     ∂ẑ/∂c = g          ->  ΔA ∝ (ε ⊙ g ⊙ (1-c²)) ⊗ z
     ∂ẑ/∂g = c − z      ->  ΔG ∝ (ε ⊙ (c−z) ⊙ g(1-g)) ⊗ z
 
-Cada fator existe no neurónio: o erro, o candidato, o valor do portão. É uma
-regra de três fatores (pré × pós × modulador), que é o consenso atual sobre
-como a plasticidade biológica realmente funciona. Passos normalizados por
-‖z‖² (NLMS) — lição aprendida três vezes nesta sessão.
+Each factor exists in the neuron: the error, the candidate, the gate value.
+It is a three-factor rule (pre × post × modulator), which is the current
+consensus on how biological plasticity actually works. Steps normalized by
+‖z‖² (NLMS) - a lesson learned three times in this session.
 """
 
 from __future__ import annotations
@@ -49,7 +49,7 @@ def _sigmoid(a: np.ndarray) -> np.ndarray:
 
 
 class GatedTransition:
-    """ẑ(t) = (1-g)⊙z + g⊙tanh(A·z), com g = σ(G·z + b) aprendido pelo erro."""
+    """ẑ(t) = (1-g)⊙z + g⊙tanh(A·z), with g = σ(G·z + b) learned by the error."""
 
     __slots__ = ("n", "A", "G", "b", "_z", "_c", "_g", "eA", "eG", "eb",
                  "eligibility", "B", "H", "_u")
@@ -62,29 +62,30 @@ class GatedTransition:
             + (rng.standard_normal((n, n)) * (0.2 / np.sqrt(n))).astype(F)
         )
         self.G = (rng.standard_normal((n, n)) * (0.3 / np.sqrt(n))).astype(F)
-        # bias inicial do portão: 0 -> g≈0.5, meio aberto, sem preconceito.
+        # initial gate bias: 0 -> g≈0.5, half open, no prejudice.
         self.b = np.full(n, gate_bias, dtype=F)
         self._z = np.zeros(n, dtype=F)
         self._c = np.zeros(n, dtype=F)
         self._g = np.full(n, 0.5, dtype=F)
 
-        # Traços de elegibilidade (e-prop / synaptic tagging): cada sinapse
-        # guarda um rasto do que acabou de fazer, e o erro que chegar
-        # enquanto o rasto dura credita-a — crédito através do tempo, sem
-        # BPTT. O rasto decai à taxa de retenção do próprio portão (1-g):
-        # uma unidade que retém muito propaga crédito para longe; uma que
-        # atualiza sempre só é creditada pelo instante. A memória do crédito
-        # e a memória do estado são a mesma coisa, como deve ser.
+        # Eligibility traces (e-prop / synaptic tagging): each synapse keeps
+        # a trace of what it just did, and the error that arrives while the
+        # trace lasts credits it - credit through time, without BPTT. The
+        # trace decays at the gate's own retention rate (1-g): a unit that
+        # retains a lot propagates credit far; one that always updates is
+        # only credited for the instant. The memory of credit and the memory
+        # of state are the same thing, as they should be.
         self.eligibility = bool(eligibility)
         self.eA = np.zeros((n, n), dtype=F) if eligibility else None
         self.eG = np.zeros((n, n), dtype=F) if eligibility else None
         self.eb = np.zeros(n, dtype=F) if eligibility else None
 
-        # O relé talâmico: o candidato e o portão veem também a entrada
-        # anterior, não só o estado recorrente — c = tanh(A·z + B·u),
-        # g = σ(G·z + H·u + b). É a última diferença estrutural para a célula
-        # do GRU, e no córtex é literal: a entrada chega em paralelo com a
-        # recorrência. Crédito local na mesma; u tem norma própria (NLMS).
+        # The thalamic relay: the candidate and the gate also see the
+        # previous input, not only the recurrent state - c = tanh(A·z + B·u),
+        # g = σ(G·z + H·u + b). It is the last structural difference to the
+        # GRU cell, and in cortex it is literal: the input arrives in
+        # parallel with the recurrence. Credit still local; u has its own
+        # norm (NLMS).
         if input_dim > 0:
             self.B = (rng.standard_normal((n, input_dim))
                       * (0.2 / np.sqrt(input_dim))).astype(F)
@@ -102,7 +103,7 @@ class GatedTransition:
 
     @property
     def gate(self) -> np.ndarray:
-        """O portão da última previsão — instrumentação."""
+        """The gate of the last prediction - instrumentation."""
         return self._g
 
     def predict(self, z_prev: np.ndarray,
@@ -119,10 +120,11 @@ class GatedTransition:
         return ((1.0 - self._g) * z_prev + self._g * self._c).astype(F, copy=False)
 
     def learn(self, eps: np.ndarray, lr: float, grad_clip: float = 0.0) -> None:
-        """Três fatores, tudo local, passo normalizado por ‖z‖².
+        """Three factors, all local, step normalized by ‖z‖².
 
-        Com elegibilidade, o produto instantâneo é acumulado num rasto por
-        sinapse que decai a (1-g), e é o rasto que o erro credita.
+        With eligibility, the instantaneous product is accumulated into a
+        per-synapse trace that decays at (1-g), and it is the trace that the
+        error credits.
         """
         z, c, g = self._z, self._c, self._g
         norm = float(np.dot(z, z)) + 1e-6
@@ -168,7 +170,7 @@ class GatedTransition:
             self.H += F(lr) * dH
 
     def sigma_max(self) -> float:
-        """Limite para o passo de assentamento. O Jacobiano da mistura é
-        (1-g)·I + g·diag(1-c²)·A mais termos do portão; majoramos pelo pior
-        caso g=1, que é σ_max(A). Conservador e barato."""
+        """Bound for the settling step. The Jacobian of the mixture is
+        (1-g)·I + g·diag(1-c²)·A plus gate terms; we bound it by the worst
+        case g=1, which is σ_max(A). Conservative and cheap."""
         return float(np.linalg.svd(self.A, compute_uv=False)[0])

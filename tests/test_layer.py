@@ -40,7 +40,7 @@ def test_backward_is_the_transpose_path():
 
 
 def test_learning_reduces_error_on_a_fixed_pattern():
-    """Regra Hebbiana local: com z fixo, ΔW ∝ ε·zᵀ tem de fechar o erro."""
+    """Local Hebbian rule: with z fixed, ΔW ∝ ε·zᵀ has to close the error."""
     lay = make_layer(act="identity")
     z = np.ones(4, dtype=F)
     target = np.linspace(-1, 1, 6).astype(F)
@@ -56,13 +56,13 @@ def test_learning_reduces_error_on_a_fixed_pattern():
 
 
 def test_learning_uses_only_local_quantities():
-    """ΔW depende só de ε (na camada) e z (imediatamente acima)."""
+    """ΔW depends only on ε (in the layer) and z (immediately above)."""
     lay = make_layer(act="identity")
     z = np.array([1.0, 0.0, 0.0, 0.0], dtype=F)
     W0 = lay.W.copy()
     lay.learn(np.ones(6, dtype=F), z, lr=0.1)
     delta = lay.W - W0
-    # z é zero exceto na coluna 0 -> só essa coluna pode mudar.
+    # z is zero except in column 0 -> only that column can change.
     assert np.allclose(delta[:, 1:], 0.0)
     assert np.all(delta[:, 0] > 0)
 

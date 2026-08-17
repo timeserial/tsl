@@ -1,9 +1,9 @@
-"""Tipo numérico único para todo o projeto.
+"""Single numeric type for the whole project.
 
-float32 e não float64: é o que existe no ESP32 (e mesmo esse vai desaparecer
-na fase de ternarização). Fixar aqui evita que o NumPy promova silenciosamente
-para float64 e que o Python e o C divirjam em bits que depois custam a
-explicar.
+float32 and not float64: it is what exists on the ESP32 (and even that will
+disappear in the ternarization phase). Fixing it here prevents NumPy from
+silently promoting to float64 and keeps Python and C from diverging in bits
+that are later hard to explain.
 """
 
 from __future__ import annotations

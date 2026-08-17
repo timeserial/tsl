@@ -1,6 +1,6 @@
-"""pcnet — rede preditiva hierárquica esparsa (Phase 0, protótipo Python).
+"""pcnet - sparse hierarchical predictive network (Phase 0, Python prototype).
 
-Ver `README.md` na raiz do projeto. O caminho crítico é:
+See `README.md` at the project root. The critical path is:
 `config.PCConfig` -> `network.PCNetwork` -> `metrics.StepTrace`.
 """
 

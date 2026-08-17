@@ -1,41 +1,41 @@
 #!/usr/bin/env python3
-"""LUTA 3 — PRÉ-REGISTO (commit antes de qualquer corrida; dados virgens).
+"""FIGHT 3 - PRE-REGISTRATION (commit before any run; virgin data).
 
-Motivação declarada: as Lutas 1-2 correram num span de teste que a fase
-exploratória já tinha avaliado (divulgado em §4.2 do paper). A Luta 3
-responde: dados NUNCA avaliados por nenhum modelo deste projeto.
+Declared motivation: Fights 1-2 ran on a test span that the exploratory
+phase had already evaluated (disclosed in §4.2 of the paper). Fight 3
+answers: data NEVER evaluated by any model in this project.
 
-DADOS (virgens — zero referências no repositório até este commit):
-- ETTh1, coluna OT (transformador, horário) — data/ETTh1.csv
-- Apneia-ECG a01 (PhysioNet, 100 Hz, int16 LE) — data/apnea_a01.dat
-Janelas de 64, split temporal 80/20 por domínio, normalização calculada
-só no treino (via _split_and_normalize, como sempre). Intercalação em
-blocos de 16. Validação = últimos 15% do treino (mín. 24 tramas).
+DATA (virgin - zero references in the repository until this commit):
+- ETTh1, OT column (transformer, hourly) - data/ETTh1.csv
+- Apnea-ECG a01 (PhysioNet, 100 Hz, int16 LE) - data/apnea_a01.dat
+Windows of 64, temporal 80/20 split per domain, normalization computed
+on the training set only (via _split_and_normalize, as always). Interleaving
+in blocks of 16. Validation = last 15% of training (min. 24 frames).
 
-LADOS DA LUTA (receita anti-bacia nos dois, como na Emenda 2):
-- Nós: TSL, topo ∈ {16, 24}; lr recozido 0.02+0.08·0.99^ep; 2 réplicas
-  por treino escolhidas pelo ERRO DE TREINO; seleção 150 ép, finais 400.
-- Adversário: {GRU, LSTM} × h ∈ {16, 32} × lr ∈ {1e-3, 3e-3} = 8 configs
-  (contra 2 nossas); Adam, clip 1.0, 2 réplicas por treino, 150 ép em
-  seleção e finais (como na Emenda 2).
-- Seleção de configuração: NRMSE de validação médio de 2 seeds.
-- FINAIS: 20 seeds por lado, no teste (usado apenas aqui).
+SIDES OF THE FIGHT (anti-basin recipe on both, as in Amendment 2):
+- Us: TSL, top ∈ {16, 24}; annealed lr 0.02+0.08·0.99^ep; 2 replicas
+  per training run chosen by the TRAINING ERROR; selection 150 ep, finals 400.
+- Adversary: {GRU, LSTM} × h ∈ {16, 32} × lr ∈ {1e-3, 3e-3} = 8 configs
+  (against our 2); Adam, clip 1.0, 2 replicas per training run, 150 ep in
+  selection and finals (as in Amendment 2).
+- Configuration selection: mean validation NRMSE over 2 seeds.
+- FINALS: 20 seeds per side, on the test set (used only here).
 
-BASELINES (a hipótese nula do referee; avaliação prequencial — preveem a
-trama seguinte ANTES de a ver, e adaptam-se online durante todo o span):
-- Persistência: x̂(t+1) = x(t). Determinística.
-- NLMS-AR: x̂(t+1) = W·x(t), W 64×64 atualizado online por NLMS;
-  μ ∈ {0.1, 0.3, 0.5, 1.0} escolhido por validação. Determinístico.
-- ESN: reservatório 128, leak e raio espectral ∈ {0.3,0.6}×{0.8,0.95}
-  por validação, leitura RLS (esquecimento 0.999) online; 20 seeds.
+BASELINES (the referee's null hypothesis; prequential evaluation - they
+predict the next frame BEFORE seeing it, and adapt online over the whole span):
+- Persistence: x̂(t+1) = x(t). Deterministic.
+- NLMS-AR: x̂(t+1) = W·x(t), W 64×64 updated online by NLMS;
+  μ ∈ {0.1, 0.3, 0.5, 1.0} chosen by validation. Deterministic.
+- ESN: reservoir 128, leak and spectral radius ∈ {0.3,0.6}×{0.8,0.95}
+  by validation, RLS readout (forgetting 0.999) online; 20 seeds.
 
-REGRA DE DECISÃO (declarada aqui; substitui o 1σ das lutas anteriores):
-o lado A vence o lado B sse o IC bootstrap 95% (10 000 reamostras) da
-diferença das médias excluir 0. Reportar sempre: por-seed, média ± dp
-(4 casas), IC 95%, Welch t, Cohen's d. Empates dizem-se empates.
+DECISION RULE (declared here; replaces the 1σ of the previous fights):
+side A beats side B iff the bootstrap 95% CI (10,000 resamples) of the
+difference of the means excludes 0. Always report: per-seed, mean ± sd
+(4 decimal places), 95% CI, Welch t, Cohen's d. Ties are called ties.
 
-Saída: correr com `python -u experiments/luta3_dados_virgens.py | tee
-experiments/luta3_finais.txt` e arquivar o ficheiro no commit do veredicto.
+Output: run with `python -u experiments/luta3_dados_virgens.py | tee
+experiments/luta3_finais.txt` and archive the file in the verdict commit.
 """
 import sys, os
 sys.path.insert(0, "src"); sys.path.insert(0, "scripts")
@@ -70,7 +70,7 @@ mix_full = inter([f[:NTR] for f in tr_frames], NTR)
 val_pairs = [(d.train[:NT], d.train[NT:NTR]) for _, d in DOM]
 test_pairs = [(d.train[:NTR], d.test) for _, d in DOM]
 
-# ---------------------------------------------------------------- o nosso lado
+# ---------------------------------------------------------------- our side
 def train_ours_once(top, data, sd, epochs):
     net = PCNetwork(PCConfig(seed=sd, fast_path=False, use_precision=True,
                              a_lr=0.0, sizes=(64, top), gated_transition=True))
@@ -109,7 +109,7 @@ def eval_ours(net, pairs):
         out.append(nrmse(np.array(P, dtype=F), target)); net.restore_state(snap)
     net.cfg = b; return float(np.mean(out))
 
-# ---------------------------------------------------------------- adversário
+# ---------------------------------------------------------------- adversary
 class R(nn.Module):
     def __init__(s, cell, h):
         super().__init__()
@@ -182,7 +182,7 @@ def eval_esn(leak, rho, sd, pairs, n_res=128, forget=0.999):
             r = (1 - leak) * r + leak * np.tanh(Win @ stream[i] + Wr @ r)
             p = Wout @ r
             if i + 1 >= n_warm: preds.append(p)
-            # RLS com esquecimento
+            # RLS with forgetting
             y = stream[i + 1]
             Pr = Pmat @ r
             k = Pr / (forget + float(r @ Pr))
@@ -191,9 +191,9 @@ def eval_esn(leak, rho, sd, pairs, n_res=128, forget=0.999):
         out.append(nrmse(np.array(preds), target))
     return float(np.mean(out))
 
-# ---------------------------------------------------------------- estatística
+# ---------------------------------------------------------------- statistics
 def stats_block(a, b, la, lb):
-    """IC bootstrap 95% de mean(b)-mean(a), Welch t, Cohen's d."""
+    """Bootstrap 95% CI of mean(b)-mean(a), Welch t, Cohen's d."""
     a, b = np.array(a), np.array(b)
     rng = np.random.default_rng(7)
     diffs = [rng.choice(b, len(b)).mean() - rng.choice(a, len(a)).mean()
@@ -239,7 +239,7 @@ if __name__ == "__main__":
     print(f"vencedores: nós topo={best_o[1]} | adv {best_a[1]} | "
           f"NLMS mu={best_mu[1]} | ESN {best_esn[1]}\n", flush=True)
 
-    print("=== FINAIS — 20 seeds, teste usado apenas aqui ===", flush=True)
+    print("=== FINAIS - 20 seeds, teste usado apenas aqui ===", flush=True)
     ours = [eval_ours(train_ours(best_o[1], mix_full, sd, 400), test_pairs)
             for sd in range(20)]
     for sd, v in enumerate(ours): print(f"  nós seed={sd}: {v:.4f}", flush=True)
@@ -258,4 +258,4 @@ if __name__ == "__main__":
     stats_block(ours, adv, "NÓS", "ADV")
     stats_block(ours, esn, "NÓS", "ESN")
     print(f"  NÓS vs NLMS-AR ({nlms:.4f}) e persistência ({pers:.4f}): "
-          f"determinísticos — comparar com a média e o IC de NÓS.", flush=True)
+          f"determinísticos - comparar com a média e o IC de NÓS.", flush=True)

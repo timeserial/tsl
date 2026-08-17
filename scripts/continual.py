@@ -1,33 +1,35 @@
 #!/usr/bin/env python3
-"""Aprender uma coisa nova sem destruir a anterior.
+"""Learn something new without destroying what came before.
 
     .venv/bin/python scripts/continual.py --tasks 5 --epochs 25
 
-O esquecimento catastrófico é dos problemas mais antigos e mais reais do
-campo: ensina-se uma tarefa a uma rede, depois outra, e a primeira desaparece.
-Não é falta de capacidade — é o dilema plasticidade/estabilidade. Uma rede que
-aprende depressa esquece depressa, e uma que não esquece não aprende.
+Catastrophic forgetting is one of the oldest and most real problems in the
+field: teach a network one task, then another, and the first one disappears.
+It is not lack of capacity - it is the plasticity/stability dilemma. A network
+that learns fast forgets fast, and one that does not forget does not learn.
 
-Os transformers têm o problema todo, e é **estrutural**: são treinados uma vez
-e congelados, e tudo o que parece aprendizagem depois disso (contexto, RAG,
-fine-tuning) é andaime por fora. Não se resolve com escala.
+Transformers have the problem in full, and it is **structural**: they are
+trained once and frozen, and everything that looks like learning after that
+(context, RAG, fine-tuning) is scaffolding bolted on outside. It is not solved
+by scale.
 
-A resposta do cérebro, e a que a secção 4 do `CONTEXTO.md` propõe, é não
-escolher: duas memórias a velocidades diferentes. O hipocampo grava o episódio
-na hora sem tocar nos pesos; o sono reproduz o que se repetiu e destila-o
-devagar no córtex.
+The brain's answer, and the one section 4 of `CONTEXTO.md` proposes, is not to
+choose: two memories at different speeds. The hippocampus records the episode
+on the spot without touching the weights; sleep replays what repeated and
+distills it slowly into the cortex.
 
-O protocolo aqui é o padrão da literatura de aprendizagem contínua:
+The protocol here is the standard one from the continual-learning literature:
 
-  * N tarefas, cada uma um sinal com estrutura diferente;
-  * treina-se **em sequência**, uma de cada vez, sem nunca voltar atrás;
-  * no fim, mede-se em **todas**.
+  * N tasks, each a signal with different structure;
+  * training is **sequential**, one task at a time, never going back;
+  * at the end, measure on **all** of them.
 
-Duas medidas, e a segunda é a que interessa:
+Two measures, and the second is the one that matters:
 
-  * **NRMSE final médio** — quão bem ficou em tudo o que aprendeu.
-  * **Esquecimento** — quanto piorou numa tarefa entre acabar de a aprender e
-    chegar ao fim. É este número que separa quem acumula de quem substitui.
+  * **mean final NRMSE** - how well it ended up on everything it learned.
+  * **Forgetting** - how much a task got worse between just having learned it
+    and reaching the end. This is the number that separates those who
+    accumulate from those who replace.
 """
 
 from __future__ import annotations
@@ -50,10 +52,10 @@ from pcnet.train import train  # noqa: E402
 
 
 def make_tasks(n_tasks: int, frame_len: int, n_frames: int, seed: int):
-    """N sinais com conteúdo espectral distinto — N "mundos" diferentes."""
+    """N signals with distinct spectral content - N different "worlds"."""
     tasks = []
     for k in range(n_tasks):
-        scale = 0.6 + 0.35 * k  # cada tarefa vive noutra banda
+        scale = 0.6 + 0.35 * k  # each task lives in a different band
         freqs = tuple(min(0.45, f * scale) for f in DEFAULT_FREQS)
         sig = make_signal(n_frames=n_frames, frame_len=frame_len,
                           freqs=freqs, seed=seed + 100 * k)
@@ -67,7 +69,7 @@ def nrmse(pred, target) -> float:
 
 
 def evaluate_task(net: PCNetwork, test: np.ndarray, warmup: np.ndarray) -> float:
-    """Avalia sem aprender e sem deixar rasto no estado."""
+    """Evaluates without learning and without leaving a trace in the state."""
     snapshot = net.snapshot_state()
     try:
         net.reset()
@@ -92,8 +94,8 @@ def run_pcnet(tasks, epochs, seed, memory: bool, sleep: int,
     for k, (train_frames, _) in enumerate(tasks):
         train(net, train_frames, epochs=epochs, replay_per_epoch=interleave)
         if sleep and net.memory is not None:
-            # O sono: reproduz episódios de tudo o que já viu, não só do que
-            # acabou de aprender. É isto que devia impedir o esquecimento.
+            # Sleep: replays episodes of everything seen so far, not just what
+            # was just learned. This is what should prevent forgetting.
             net.consolidate(n_episodes=32, passes=sleep)
         for j, (tr_j, te_j) in enumerate(tasks):
             matrix[k, j] = evaluate_task(net, te_j, tr_j)
@@ -101,7 +103,7 @@ def run_pcnet(tasks, epochs, seed, memory: bool, sleep: int,
 
 
 def run_torch(tasks, epochs, seed, kind: str, frame_len: int):
-    """Uma rede treinada com backprop, na mesma sequência. O contraste."""
+    """A network trained with backprop, on the same sequence. The contrast."""
     import torch
     import torch.nn as nn
 
@@ -144,19 +146,18 @@ def run_torch(tasks, epochs, seed, kind: str, frame_len: int):
 
 
 def run_joint(tasks, epochs, seed):
-    """Controlo decisivo: treinar em tudo ao mesmo tempo.
+    """The decisive control: train on everything at the same time.
 
-    Se nem assim a rede conseguir fazer as N tarefas, então o que a tabela
-    mostra não é esquecimento — é falta de capacidade, e nenhuma memória
-    episódica do mundo resolve isso. É o mesmo cuidado que evitou concluir
-    que o modelo era mau no giroscópio do HAR, quando o que não tinha sinal
-    era a tarefa.
+    If the network cannot do the N tasks even then, what the table shows is
+    not forgetting - it is lack of capacity, and no episodic memory in the
+    world fixes that. It is the same care that avoided concluding the model
+    was bad at the HAR gyroscope, when what had no signal was the task.
     """
     net = PCNetwork(PCConfig.recommended(seed=seed))
-    # Intercalar em blocos curtos, não concatenar. Concatenar seria treino
-    # sequencial com outro nome — o modelo acabaria sempre na última tarefa,
-    # que foi exatamente o que a primeira versão deste controlo fez, dando um
-    # "teto" mais baixo que as variantes que devia limitar.
+    # Interleave in short blocks, do not concatenate. Concatenating would be
+    # sequential training by another name - the model would always end up on
+    # the last task, which is exactly what the first version of this control
+    # did, giving a "ceiling" lower than the variants it was supposed to bound.
     block = 16
     chunks = []
     n_blocks = min(len(t[0]) for t in tasks) // block
@@ -172,7 +173,7 @@ def run_joint(tasks, epochs, seed):
 def summarize(matrix: np.ndarray) -> dict:
     n = len(matrix)
     final = matrix[-1]
-    # Esquecimento: quanto piorou cada tarefa entre acabar de a aprender e o fim
+    # Forgetting: how much each task worsened between just-learned and the end
     forgetting = [float(matrix[-1, j] - matrix[j, j]) for j in range(n - 1)]
     return {
         "final_medio": float(final.mean()),
@@ -189,14 +190,14 @@ def main() -> int:
     ap.add_argument("--frames", type=int, default=400)
     ap.add_argument("--frame-len", type=int, default=64)
     ap.add_argument("--seeds", type=int, default=2)
-    ap.add_argument("--sleep", type=int, default=2, help="passagens de consolidação")
+    ap.add_argument("--sleep", type=int, default=2, help="consolidation passes")
     ap.add_argument("--out", type=Path)
     args = ap.parse_args()
 
     tasks = make_tasks(args.tasks, args.frame_len, args.frames, seed=1)
-    print(f"{args.tasks} tarefas, {args.epochs} passagens cada, "
-          f"{len(tasks[0][0])} tramas de treino por tarefa")
-    print("Treino sequencial: cada tarefa é vista uma vez e nunca mais.\n")
+    print(f"{args.tasks} tasks, {args.epochs} passes each, "
+          f"{len(tasks[0][0])} training frames per task")
+    print("Sequential training: each task is seen once and never again.\n")
 
     variants = [
         ("TETO: treino conjunto (não sequencial)",
@@ -216,7 +217,7 @@ def main() -> int:
     except ImportError:
         pass
 
-    rule("Aprender em sequência, medir em tudo")
+    rule("Learn in sequence, measure on everything")
     rows, results = [], {}
     for name, fn in variants:
         stats, mems = [], {}
@@ -236,8 +237,9 @@ def main() -> int:
         print(f"  … {name}")
     print()
     table(rows)
-    print("\n  Esquecimento = quanto piorou cada tarefa entre acabar de a aprender")
-    print("  e chegar ao fim. Zero seria acumular; positivo grande é substituir.")
+    print("\n  Forgetting = how much each task got worse between just having learned")
+    print("  it and reaching the end. Zero would be accumulating; large positive is")
+    print("  replacing.")
 
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)

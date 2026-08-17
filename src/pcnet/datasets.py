@@ -1,13 +1,13 @@
-"""Problemas reais.
+"""Real problems.
 
-Nada de dados dentro do repositório: estas funções recebem um caminho e
-devolvem tramas. O que interessa é que qualquer sinal univariado amostrado no
-tempo entra pela mesma porta que o sinal de brinquedo, e sai comparável.
+No data inside the repository: these functions take a path and return frames.
+What matters is that any univariate signal sampled in time enters through the
+same door as the toy signal, and comes out comparable.
 
-Normalização: subtrai-se a média e divide-se pelo desvio-padrão **calculados
-só no troço de treino**. É o cuidado mais fácil de esquecer e o que mais
-inflaciona resultados — normalizar com estatísticas do conjunto todo deixa
-passar informação do futuro para o passado.
+Normalization: subtract the mean and divide by the standard deviation
+**computed on the training stretch only**. It is the easiest precaution to
+forget and the one that inflates results the most, normalizing with
+whole-set statistics lets information leak from the future into the past.
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ from .signals import frame_signal
 
 @dataclass
 class Dataset:
-    """Um sinal real, já em tramas e já dividido no tempo."""
+    """A real signal, already framed and already split in time."""
 
     name: str
     train: np.ndarray  # (n_train, frame_len)
@@ -66,17 +66,18 @@ def _split_and_normalize(
             f"{len(test)} de teste)"
         )
 
-    # Guarda contra o erro mais fácil de cometer e o mais difícil de detetar:
-    # um troço de teste sem energia. Se o teste for silêncio, "repetir a
-    # anterior" acerta perfeitamente, tudo o resto leva um erro normalizado
-    # astronómico, e a tabela toda passa a medir o silêncio em vez do modelo.
+    # Guard against the easiest mistake to make and the hardest to detect:
+    # a test stretch with no energy. If the test is silence, "repeat the
+    # previous one" scores perfectly, everything else takes an astronomical
+    # normalized error, and the whole table ends up measuring the silence
+    # instead of the model.
     rms_tr = float(np.sqrt(np.mean(np.square(train))))
     rms_te = float(np.sqrt(np.mean(np.square(test))))
     if rms_te < 0.05 * rms_tr:
         raise ValueError(
             f"{name}: o troço de teste não tem energia (RMS {rms_te:.4g} contra "
             f"{rms_tr:.4g} no treino). Qualquer métrica normalizada sobre isto "
-            f"é ficção — corta o silêncio ou usa outro troço."
+            f"é ficção - corta o silêncio ou usa outro troço."
         )
     return Dataset(name=name, train=train, test=test, frame_len=frame_len,
                    rms_train=rms_tr, rms_test=rms_te, **kw)
@@ -84,11 +85,11 @@ def _split_and_normalize(
 
 # ---------------------------------------------------------------------------
 def trim_silence(x: np.ndarray, rel: float = 0.02) -> np.ndarray:
-    """Corta silêncio no início e no fim.
+    """Trims silence at the start and at the end.
 
-    Gravações curtas acabam quase sempre em silêncio, e um troço de teste
-    silencioso destrói qualquer métrica normalizada. O limiar é relativo ao
-    pico, para não depender do volume da gravação.
+    Short recordings almost always end in silence, and a silent test stretch
+    destroys any normalized metric. The threshold is relative to the peak,
+    so it does not depend on the recording's volume.
     """
     env = np.abs(np.asarray(x, dtype=np.float64))
     if env.max() <= 0:
@@ -103,7 +104,7 @@ def load_wav(
     train_frac: float = 0.8,
     trim: bool = True,
 ) -> Dataset:
-    """Áudio real de um WAV de 16 bit (mono, ou convertido para mono)."""
+    """Real audio from a 16-bit WAV (mono, or converted to mono)."""
     path = Path(path)
     with wave.open(str(path), "rb") as w:
         if w.getsampwidth() != 2:
@@ -127,7 +128,7 @@ def load_csv_column(
     name: str | None = None,
     rate_hz: float | None = None,
 ) -> Dataset:
-    """Uma coluna de uma série temporal em CSV com cabeçalho."""
+    """One column of a time series in a CSV with a header."""
     path = Path(path)
     with path.open(newline="") as fh:
         reader = csv.DictReader(fh)
@@ -153,21 +154,23 @@ def load_uci_har_inertial(
     frame_len: int = 64,
     train_frac: float = 0.8,
 ) -> Dataset:
-    """Acelerómetro real a 50 Hz do UCI HAR — o domínio-alvo do plano.
+    """Real 50 Hz accelerometer data from UCI HAR - the plan's target domain.
 
-    O ficheiro vem em janelas de 128 amostras com 50% de sobreposição, e as
-    janelas estão agrupadas por sujeito e por atividade. Concatenar tudo
-    criaria saltos artificiais nas fronteiras, que o modelo aprenderia a
-    "prever" e que não existem em nenhum sensor real. Por isso:
+    The file comes in 128-sample windows with 50% overlap, and the windows
+    are grouped by subject and by activity. Concatenating everything would
+    create artificial jumps at the boundaries, which the model would learn to
+    "predict" and which exist in no real sensor. Therefore:
 
-      * reconstrói-se o sinal contínuo tomando as primeiras `128/2` amostras
-        de cada janela (que é exatamente o que a sobreposição de 50% permite);
-      * usa-se apenas a *maior corrida contígua* de janelas do mesmo sujeito.
+      * the continuous signal is rebuilt by taking the first `128/2` samples
+        of each window (which is exactly what the 50% overlap allows);
+      * only the *longest contiguous run* of windows from the same subject
+        is used.
 
-    Agrupa-se por sujeito e não por atividade: dentro de um sujeito as janelas
-    vêm da mesma gravação contínua, e as mudanças de atividade são transições
-    verdadeiras — a pessoa mudou mesmo de andar para subir escadas. São o tipo
-    de surpresa que esta arquitetura existe para tratar, não artefactos.
+    Grouping is by subject and not by activity: within a subject the windows
+    come from the same continuous recording, and the activity changes are
+    true transitions, the person really did switch from walking to climbing
+    stairs. They are the kind of surprise this architecture exists to handle,
+    not artifacts.
     """
     root = Path(root)
     base = root / split / "Inertial Signals" / f"{signal}_{split}.txt"
@@ -198,7 +201,7 @@ def load_uci_har_inertial(
 
 def load_toy(n_frames: int = 900, frame_len: int = 64, seed: int = 1,
              train_frac: float = 0.8) -> Dataset:
-    """O sinal de brinquedo, pela mesma porta — serve de controlo."""
+    """The toy signal, through the same door - it serves as a control."""
     from .signals import make_signal
 
     sig = make_signal(n_frames=n_frames, frame_len=frame_len, seed=seed)

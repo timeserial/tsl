@@ -1,34 +1,36 @@
-"""Neurogénese por novidade: recrutar unidades virgens quando o mundo muda.
+"""Novelty-driven neurogenesis: recruit virgin units when the world changes.
 
-O giro dentado faz isto de verdade: neurónios novos, hiperplásticos, são
-integrados quando o ambiente é novo, e os circuitos veteranos ficam
-relativamente intocados. Aqui a versão mínima:
+The dentate gyrus really does this: new, hyperplastic neurons are integrated
+when the environment is new, and the veteran circuits remain relatively
+untouched. Here, the minimal version:
 
-  1. A rede nasce com uma fração das unidades latentes ativas. As restantes
-     existem mas estão CONGELADAS: pesos de entrada e de saída a zero e taxa
-     de aprendizagem zero nas suas linhas/colunas. Com pesos nulos o estado
-     delas fica em 0 por construção (tanh(0)=0, nenhum erro as puxa), logo
-     não participam em nada — nem custo, nem interferência.
+  1. The network is born with a fraction of the latent units active. The
+     rest exist but are FROZEN: input and output weights at zero and zero
+     learning rate on their rows/columns. With null weights their state
+     stays at 0 by construction (tanh(0)=0, no error pulls them), so they
+     take part in nothing - neither cost nor interference.
 
-  2. Um detetor de novidade acompanha a surpresa em malha aberta
-     (trace.open_loop_surprise) com duas EMAs: uma curta (o presente) e uma
-     longa (o habitual). Quando a curta excede `novelty_ratio` vezes a longa
-     durante `sustain` tramas seguidas, recruta-se um bloco de unidades
-     virgens por nível: init pequeno nas linhas/colunas delas.
+  2. A novelty detector tracks the open-loop surprise
+     (trace.open_loop_surprise) with two EMAs: a short one (the present) and
+     a long one (the usual). When the short one exceeds `novelty_ratio`
+     times the long one for `sustain` consecutive frames, a block of virgin
+     units is recruited per level: small init on their rows/columns.
 
-  3. No momento do recrutamento, TODAS as unidades até aí ativas passam a
-     veteranas protegidas: a taxa de aprendizagem de qualquer sinapse na
-     linha ou coluna de uma veterana é multiplicada por `protect_factor`.
-     É metaplasticidade estrutural — por unidade, não por sinapse.
+  3. At the moment of recruitment, ALL units active until then become
+     protected veterans: the learning rate of any synapse on the row or
+     column of a veteran is multiplied by `protect_factor`.
+     It is structural metaplasticity - per unit, not per synapse.
 
-  4. Histerese: depois de recrutar, o detetor desarma e só rearma quando a
-     surpresa curta volta a ~1× a longa (a tarefa nova foi absorvida). Sem
-     isto, uma única mudança de mundo gastava todos os blocos de reserva.
+  4. Hysteresis: after recruiting, the detector disarms and only rearms when
+     the short surprise returns to ~1x the long one (the new task has been
+     absorbed). Without this, a single world change would spend all the
+     reserve blocks.
 
-A implementação não toca na regra local: `step` corre a rede normal e depois
-reescreve W como W_old + S ⊙ (W_new − W_old), com S a matriz de escalas de
-taxa por sinapse (0 congelada, `protect_factor` veterana, 1 virgem ativa).
-Funciona por cima de qualquer mecanismo interno (metaplasticidade incluída).
+The implementation does not touch the local rule: `step` runs the normal
+network and then rewrites W as W_old + S ⊙ (W_new − W_old), with S the
+matrix of per-synapse rate scales (0 frozen, `protect_factor` veteran, 1
+active virgin). It works on top of any internal mechanism (metaplasticity
+included).
 """
 
 from __future__ import annotations
@@ -44,33 +46,33 @@ from .network import PCNetwork
 
 @dataclass
 class NeurogenesisConfig:
-    # Fração das unidades latentes ativa à nascença; o resto é reserva.
+    # Fraction of the latent units active at birth; the rest is reserve.
     initial_frac: float = 0.5
-    # Em quantos blocos a reserva se divide (1 recrutamento = 1 bloco).
+    # How many blocks the reserve splits into (1 recruitment = 1 block).
     n_blocks: int = 2
-    # Multiplicador da taxa de aprendizagem nas linhas/colunas das veteranas.
+    # Learning-rate multiplier on the rows/columns of the veterans.
     protect_factor: float = 0.05
-    # Dispara quando EMA_curta > novelty_ratio × EMA_longa ...
+    # Fires when EMA_short > novelty_ratio × EMA_long ...
     novelty_ratio: float = 1.5
-    # ... durante `sustain` tramas seguidas.
+    # ... for `sustain` consecutive frames.
     sustain: int = 20
-    alpha_short: float = 0.2    # EMA curta (~5 tramas)
-    alpha_long: float = 0.005   # EMA longa (~200 tramas)
-    warmup: int = 500           # tramas antes de o detetor armar
-    rearm_ratio: float = 1.1    # rearma quando curta < rearm_ratio × longa
-    # Escala do init das unidades recrutadas (multiplica 1/sqrt(fan_in)).
+    alpha_short: float = 0.2    # short EMA (~5 frames)
+    alpha_long: float = 0.005   # long EMA (~200 frames)
+    warmup: int = 500           # frames before the detector arms
+    rearm_ratio: float = 1.1    # rearms when short < rearm_ratio × long
+    # Init scale of the recruited units (multiplies 1/sqrt(fan_in)).
     recruit_init: float = 0.2
-    # Como se combina o fator dos dois extremos de uma sinapse:
-    #   "min":   qualquer sinapse na linha/coluna de uma veterana leva
-    #            protect_factor — proteção literal por unidade.
-    #   "hyper": sinapse que toca uma unidade RECÉM-recrutada é totalmente
-    #            plástica (neurónios novos são hiperplásticos); só as
-    #            sinapses veterana-veterana ficam protegidas.
+    # How the factor of a synapse's two endpoints is combined:
+    #   "min":   any synapse on the row/column of a veteran gets
+    #            protect_factor - literal per-unit protection.
+    #   "hyper": a synapse touching a NEWLY recruited unit is fully
+    #            plastic (new neurons are hyperplastic); only
+    #            veteran-veteran synapses stay protected.
     protect_rule: str = "min"
 
 
 class NeurogenesisNetwork(PCNetwork):
-    """PCNetwork com reserva de unidades latentes recrutáveis por novidade."""
+    """PCNetwork with a reserve of latent units recruitable by novelty."""
 
     def __init__(self, config: PCConfig | None = None,
                  ng: NeurogenesisConfig | None = None) -> None:
@@ -85,12 +87,12 @@ class NeurogenesisNetwork(PCNetwork):
             )
         self._ng_rng = np.random.default_rng(cfg.seed + 977)
 
-        # factor[l][j]: 0 congelada, protect_factor veterana, 1 ativa virgem.
-        # O nível 0 é sensorial: sempre 1.
+        # factor[l][j]: 0 frozen, protect_factor veteran, 1 active virgin.
+        # Level 0 is sensory: always 1.
         self.factor: list[np.ndarray] = [
             np.ones(n, dtype=F) for n in cfg.sizes
         ]
-        # Reserva por nível: lista de blocos (arrays de índices), por ordem.
+        # Reserve per level: list of blocks (arrays of indices), in order.
         self.blocks: list[list[np.ndarray]] = [[] for _ in cfg.sizes]
         for l in range(1, len(cfg.sizes)):
             n = cfg.sizes[l]
@@ -104,7 +106,7 @@ class NeurogenesisNetwork(PCNetwork):
         self._freeze_inactive()
         self._rebuild_scales()
 
-        # Detetor de novidade.
+        # Novelty detector.
         self._ema_short: float | None = None
         self._ema_long: float | None = None
         self._streak = 0
@@ -114,19 +116,19 @@ class NeurogenesisNetwork(PCNetwork):
         self.recruit_log: list[dict] = []
 
     # ------------------------------------------------------------------
-    # máscaras
+    # masks
     # ------------------------------------------------------------------
     def _freeze_inactive(self) -> None:
-        """Zera os pesos de entrada e saída de todas as unidades congeladas."""
+        """Zeroes the input and output weights of all frozen units."""
         for l in range(1, self.L + 1):
             frozen = self.factor[l] == 0.0
             if not frozen.any():
                 continue
-            # coluna no gerador de baixo: a saída da unidade
+            # column in the generator below: the unit's output
             self.layers[l - 1].W[:, frozen] = 0.0
             self.layers[l - 1].refresh_device()
             if l < self.L:
-                # linha no gerador de cima: a entrada da unidade
+                # row in the generator above: the unit's input
                 self.layers[l].W[frozen, :] = 0.0
                 self.layers[l].refresh_device()
             else:
@@ -138,28 +140,28 @@ class NeurogenesisNetwork(PCNetwork):
         fr, fc = self.factor[l_row], self.factor[l_col]
         if self.ng.protect_rule == "min":
             return np.minimum.outer(fr, fc).astype(F)
-        # "hyper": congelada domina; depois, tocar numa unidade virgem
-        # (fator exatamente 1, e latente) dá plasticidade total; o resto
-        # (veterana-veterana, ou veterana-sensorial) fica protegido.
+        # "hyper": frozen dominates; then, touching a virgin unit
+        # (factor exactly 1, and latent) gives full plasticity; the rest
+        # (veteran-veteran, or veteran-sensory) stays protected.
         active = np.multiply.outer(fr > 0, fc > 0)
         fresh_r = (fr == 1.0) if l_row > 0 else np.zeros(fr.size, dtype=bool)
         fresh_c = (fc == 1.0) if l_col > 0 else np.zeros(fc.size, dtype=bool)
         fresh = np.logical_or.outer(fresh_r, fresh_c)
-        # Antes do primeiro recrutamento todas as ativas têm fator 1 (são
-        # "virgens"), logo tudo o que é ativo fica a 1 — como deve ser.
+        # Before the first recruitment all active units have factor 1 (they
+        # are "virgins"), so everything active stays at 1 - as it should.
         S = np.where(fresh, F(1.0), F(self.ng.protect_factor))
         return np.where(active, S, F(0.0)).astype(F)
 
     def _rebuild_scales(self) -> None:
-        """S por matriz: escala de lr de cada sinapse a partir dos fatores
-        dos seus dois extremos. Congelada domina (0)."""
+        """S per matrix: lr scale of each synapse from the factors of its
+        two endpoints. Frozen dominates (0)."""
         self._S_layers = [
             self._scale_matrix(l, l + 1) for l in range(self.L)
         ]
         self._S_A = self._scale_matrix(self.L, self.L)
 
     # ------------------------------------------------------------------
-    # um passo: rede normal + máscara de plasticidade + detetor
+    # one step: normal network + plasticity mask + detector
     # ------------------------------------------------------------------
     def step(self, x, learn: bool = True, use_memory: bool = True):
         if learn:
@@ -170,12 +172,13 @@ class NeurogenesisNetwork(PCNetwork):
             for lay, W0, S in zip(self.layers, pre_W, self._S_layers):
                 lay.W[:] = W0 + S * (lay.W - W0)
                 lay.refresh_device()
-                # Metaplasticidade: a importância das sinapses congeladas é
-                # estruturalmente zero e diluía a média — a escala relativa
-                # imp/média das vivas duplicava e o lr efetivo delas caía
-                # até a rede não aprender nada (medido: NRMSE 1.000, ou
-                # seja, prever zero). Manter as congeladas à média das vivas
-                # torna a normalização cega à reserva.
+                # Metaplasticity: the importance of frozen synapses is
+                # structurally zero and was diluting the mean - the relative
+                # imp/mean scale of the live ones doubled and their effective
+                # lr fell until the network learned nothing (measured: NRMSE
+                # 1.000, that is, predicting zero). Keeping the frozen ones
+                # at the mean of the live ones makes the normalization blind
+                # to the reserve.
                 if self.cfg.metaplasticity > 0.0:
                     dead = S == 0.0
                     if dead.any() and not dead.all():
@@ -186,7 +189,7 @@ class NeurogenesisNetwork(PCNetwork):
         return trace
 
     # ------------------------------------------------------------------
-    # detetor de novidade
+    # novelty detector
     # ------------------------------------------------------------------
     def _novelty(self, s: float) -> None:
         self._t += 1
@@ -212,22 +215,22 @@ class NeurogenesisNetwork(PCNetwork):
             self._recruit()
             self._armed = False
             self._streak = 0
-            # O mundo novo passa a ser o novo "habitual": sem isto, a EMA
-            # longa demorava ~200 tramas a subir e o mesmo salto de surpresa
-            # disparava duas vezes, gastando dois blocos numa só mudança
-            # (medido: recrutamentos [0, 12, 0] em vez de [0, 6, 6]).
+            # The new world becomes the new "usual": without this, the long
+            # EMA took ~200 frames to rise and the same surprise jump fired
+            # twice, spending two blocks on a single change
+            # (measured: recruitments [0, 12, 0] instead of [0, 6, 6]).
             self._ema_long = self._ema_short
 
     # ------------------------------------------------------------------
-    # recrutamento
+    # recruitment
     # ------------------------------------------------------------------
     def _recruit(self) -> None:
-        """Desbloqueia um bloco por nível; protege todas as veteranas."""
+        """Unlocks one block per level; protects all veterans."""
         rng = self._ng_rng
         cfg = self.cfg
         recruited: dict[int, int] = {}
         for l in range(1, self.L + 1):
-            # 1. quem estava ativa passa a veterana protegida
+            # 1. whoever was active becomes a protected veteran
             active = self.factor[l] > 0.0
             self.factor[l][active] = F(self.ng.protect_factor)
             if not self.blocks[l]:
@@ -238,8 +241,8 @@ class NeurogenesisNetwork(PCNetwork):
             recruited[l] = len(blk)
             self.n_recruited += len(blk)
 
-            # 2. init pequeno nas linhas/colunas das recrutadas, só para
-            # parceiros ativos — sinapse com extremo congelado fica a 0.
+            # 2. small init on the rows/columns of the recruited units, only
+            # for active partners - a synapse with a frozen endpoint stays at 0.
             below_ok = self.factor[l - 1] > 0.0
             scale_out = self.ng.recruit_init / np.sqrt(cfg.sizes[l])
             for j in blk:
@@ -259,7 +262,7 @@ class NeurogenesisNetwork(PCNetwork):
                 for j in blk:
                     row = rng.standard_normal(cfg.sizes[l]).astype(F) * F(scale_a)
                     self.A[j, :] = np.where(top_ok, row, F(0.0))
-                    self.A[j, j] = F(1.0)  # retenção própria, como no init
+                    self.A[j, j] = F(1.0)  # self-retention, as at init
                 self._refresh_transition()
 
         self._rebuild_scales()
@@ -271,6 +274,6 @@ class NeurogenesisNetwork(PCNetwork):
 
     # ------------------------------------------------------------------
     def active_counts(self) -> dict[int, int]:
-        """Unidades ativas (virgens + veteranas) por nível latente."""
+        """Active units (virgins + veterans) per latent level."""
         return {l: int(np.count_nonzero(self.factor[l]))
                 for l in range(1, self.L + 1)}

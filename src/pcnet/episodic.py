@@ -1,41 +1,44 @@
-"""Memória episódica: gravar agora, consolidar depois.
+"""Episodic memory: record now, consolidate later.
 
-A secção 4 do `CONTEXTO.md` pede duas memórias, e a distinção entre elas é o
-ponto todo:
+Section 4 of `CONTEXTO.md` asks for two memories, and the distinction
+between them is the whole point:
 
-  * **Episódica** — um armazém key-value gravável na hora. Um facto novo entra
-    aqui *sem tocar nos pesos*. É por isso que aprender uma coisa nova não
-    destrói o que já se sabia.
-  * **Consolidação offline** — mais tarde, em repouso, os episódios são
-    reproduzidos e destilados nos pesos geradores pela mesma regra local de
-    sempre. O que se repete fica; o que foi acidental é esquecido.
+  * **Episodic** - a key-value store writable on the spot. A new fact enters
+    here *without touching the weights*. That is why learning something new
+    does not destroy what was already known.
+  * **Offline consolidation** - later, at rest, the episodes are replayed
+    and distilled into the generative weights by the same local rule as
+    always. What repeats stays; what was accidental is forgotten.
 
-É o hipocampo e o sono. E é a resposta do cérebro ao esquecimento
-catastrófico: uma rede que aprende só nos pesos tem de escolher entre plástica
-e estável — plástica esquece, estável não aprende. Duas memórias com
-velocidades diferentes resolvem o dilema em vez de o negociar.
+It is the hippocampus and sleep. And it is the brain's answer to
+catastrophic forgetting: a network that learns only in the weights has to
+choose between plastic and stable - plastic forgets, stable does not learn.
+Two memories with different speeds solve the dilemma instead of negotiating
+it.
 
-Três decisões de desenho que valem a pena explicar:
+Three design decisions worth explaining:
 
-**A chave é o estado do topo.** O que endereça a memória não é a entrada crua,
-é o resumo que a própria rede faz do contexto. Recuperação por conteúdo, como
-a completação de padrões no hipocampo — um pedaço do contexto chega para
-trazer o episódio inteiro.
+**The key is the top state.** What addresses the memory is not the raw
+input, it is the summary the network itself makes of the context.
+Content-based retrieval, like pattern completion in the hippocampus - a
+piece of the context is enough to bring back the whole episode.
 
-**O valor é o erro, não a observação.** A memória guarda aquilo em que a
-hierarquia se enganou, não o que aconteceu. Assim a memória corrige o resíduo
-em vez de competir com os pesos — é a mesma divisão de trabalho que fez a via
-rápida funcionar, depois de ter falhado por ser treinada no sinal todo.
+**The value is the error, not the observation.** The memory stores what the
+hierarchy got wrong, not what happened. That way the memory corrects the
+residual instead of competing with the weights - it is the same division of
+labor that made the fast path work, after it had failed by being trained on
+the whole signal.
 
-**Escreve-se quando há surpresa.** O mesmo número que decide quanto pensar
-decide o que vale a pena gravar. No cérebro é o que a novidade faz às sinapses
-do hipocampo; aqui sai de graça, porque a surpresa já estava calculada.
+**Writing happens when there is surprise.** The same number that decides how
+much to think decides what is worth recording. In the brain it is what
+novelty does to hippocampal synapses; here it comes for free, because the
+surprise was already computed.
 
-O armazém tem tamanho fixo, de propósito. Memória que cresce com o tempo não
-cabe num dispositivo — e é exatamente a limitação da solução da Google
-("Memory Caching", arXiv:2602.24281), que resolve o mesmo problema gastando
-memória proporcional ao comprimento da sequência. Aqui o orçamento é fixo e a
-pergunta interessante passa a ser o que *deitar fora*.
+The store has a fixed size, on purpose. Memory that grows with time does not
+fit on a device - and that is exactly the limitation of Google's solution
+("Memory Caching", arXiv:2602.24281), which solves the same problem by
+spending memory proportional to the sequence length. Here the budget is
+fixed and the interesting question becomes what to *throw away*.
 """
 
 from __future__ import annotations
@@ -49,23 +52,24 @@ from .dtypes import F
 
 @dataclass(frozen=True)
 class EpisodicConfig:
-    n_slots: int = 128  # orçamento fixo: nº de episódios que cabem
-    write_threshold: float = 1.5  # surpresa (× a média corrente) para gravar
-    read_threshold: float = 0.6  # semelhança mínima para a memória opinar
-    temperature: float = 0.1  # suavidade da recuperação (0 = vencedor único)
-    read_gain: float = 1.0  # quanto da correção recuperada se aplica
-    decay: float = 0.9999  # esquecimento passivo dos episódios não usados
-    # Amostragem por reservatório: quando o armazém está cheio, cada episódio
-    # novo entra com probabilidade n_slots/n_vistos e expulsa um ao acaso.
-    # Isso mantém uma amostra aproximadamente uniforme de *tudo* o que foi
-    # visto, em vez de encher com o mais recente. Sem isto, uma tarefa nova
-    # varre as anteriores do armazém em minutos — e a consolidação fica sem
-    # nada de antigo para reproduzir, que foi exatamente o que aconteceu.
+    n_slots: int = 128  # fixed budget: number of episodes that fit
+    write_threshold: float = 1.5  # surprise (× the running mean) to record
+    read_threshold: float = 0.6  # minimum similarity for the memory to weigh in
+    temperature: float = 0.1  # softness of the retrieval (0 = single winner)
+    read_gain: float = 1.0  # how much of the retrieved correction is applied
+    decay: float = 0.9999  # passive forgetting of unused episodes
+    # Reservoir sampling: when the store is full, each new episode enters
+    # with probability n_slots/n_seen and evicts one at random.
+    # This keeps an approximately uniform sample of *everything* that was
+    # seen, instead of filling up with the most recent. Without this, a new
+    # task sweeps the previous ones out of the store within minutes - and
+    # consolidation is left with nothing old to replay, which is exactly
+    # what happened.
     reservoir: bool = True
 
 
 class EpisodicMemory:
-    """Armazém key-value de tamanho fixo, endereçável por conteúdo."""
+    """Fixed-size key-value store, content-addressable."""
 
     __slots__ = ("cfg", "keys", "values", "frames", "prev_frames", "strength",
                  "n_written", "_surprise_avg", "_reads", "_hits", "_seen", "_rng")
@@ -73,28 +77,30 @@ class EpisodicMemory:
     def __init__(self, key_dim: int, value_dim: int, cfg: EpisodicConfig | None = None):
         self.cfg = cfg or EpisodicConfig()
         self.keys = np.zeros((self.cfg.n_slots, key_dim), dtype=F)
-        # O valor é o resíduo — o que a hierarquia falhou — porque é isso que
-        # a memória tem de corrigir sem competir com os pesos.
+        # The value is the residual - what the hierarchy missed - because
+        # that is what the memory has to correct without competing with the
+        # weights.
         self.values = np.zeros((self.cfg.n_slots, value_dim), dtype=F)
-        # A observação crua guarda-se à parte, só para o replay do sono: a
-        # consolidação precisa da trama tal como aconteceu, não do resíduo
-        # (que foi medido contra uma previsão que entretanto já mudou).
+        # The raw observation is stored separately, only for sleep replay:
+        # consolidation needs the frame as it happened, not the residual
+        # (which was measured against a prediction that has since changed).
         self.frames = np.zeros((self.cfg.n_slots, value_dim), dtype=F)
-        # E a trama *anterior*, porque um episódio não é uma observação — é
-        # uma observação num contexto. Reproduzir a trama sozinha, fora da
-        # sequência de que veio, é recordar uma palavra sem a frase: a rede
-        # recebe um erro enorme e os pesos vão parar a sítios errados. Medido:
-        # com replay descontextualizado a rede nem sequer aprendia a primeira
-        # tarefa (NRMSE 0.97, o mesmo que prever zero).
+        # And the *previous* frame, because an episode is not an observation
+        # - it is an observation in a context. Replaying the frame alone,
+        # outside the sequence it came from, is recalling a word without the
+        # sentence: the network receives a huge error and the weights end up
+        # in the wrong places. Measured: with decontextualized replay the
+        # network did not even learn the first task (NRMSE 0.97, the same as
+        # predicting zero).
         self.prev_frames = np.zeros((self.cfg.n_slots, value_dim), dtype=F)
-        # Força de cada traço: sobe quando é gravado ou útil, desce sozinha.
-        # Slots com força nula estão vazios.
+        # Strength of each trace: rises when recorded or useful, falls on its
+        # own. Slots with zero strength are empty.
         self.strength = np.zeros(self.cfg.n_slots, dtype=F)
         self.n_written = 0
         self._surprise_avg = 0.0
         self._reads = 0
         self._hits = 0
-        self._seen = 0  # candidatos vistos, para o reservatório
+        self._seen = 0  # candidates seen, for the reservoir
         self._rng = np.random.default_rng(0)
 
     # ------------------------------------------------------------------
@@ -119,7 +125,7 @@ class EpisodicMemory:
 
     # ------------------------------------------------------------------
     def _similarity(self, key: np.ndarray) -> np.ndarray:
-        """Cosseno entre a chave e cada traço ocupado; -1 nos vazios."""
+        """Cosine between the key and each occupied trace; -1 for the empty ones."""
         occupied = self.strength > 0
         sim = np.full(self.cfg.n_slots, -1.0, dtype=F)
         if not np.any(occupied):
@@ -133,11 +139,12 @@ class EpisodicMemory:
         return sim
 
     def read(self, key: np.ndarray) -> tuple[np.ndarray | None, float]:
-        """Recupera a correção associada ao contexto atual.
+        """Retrieves the correction associated with the current context.
 
-        Devolve (correção, confiança). Confiança é a semelhança do melhor
-        traço; abaixo do limiar devolve None, porque uma memória que opina
-        sempre é uma memória que injeta ruído em todo o lado.
+        Returns (correction, confidence). Confidence is the similarity of
+        the best trace; below the threshold it returns None, because a
+        memory that always weighs in is a memory that injects noise
+        everywhere.
         """
         self._reads += 1
         sim = self._similarity(key)
@@ -145,25 +152,25 @@ class EpisodicMemory:
         if best < self.cfg.read_threshold:
             return None, best
 
-        # Média dos traços próximos, pesada por semelhança. Com temperatura
-        # baixa aproxima-se do vencedor único.
+        # Mean of the nearby traces, weighted by similarity. With low
+        # temperature it approaches the single winner.
         mask = sim >= self.cfg.read_threshold
         w = np.exp((sim[mask] - best) / max(self.cfg.temperature, 1e-6))
         w = (w / w.sum()).astype(F)
         value = (w[:, None] * self.values[mask]).sum(axis=0).astype(F)
 
-        # Usar um traço reforça-o: o que serve sobrevive à limpeza.
+        # Using a trace reinforces it: what serves survives the cleanup.
         self.strength[mask] += F(0.1) * w
         self._hits += 1
         return value, best
 
     def write(self, key: np.ndarray, value: np.ndarray, frame: np.ndarray,
               prev_frame: np.ndarray, surprise: float) -> bool:
-        """Grava um episódio se ele foi suficientemente surpreendente.
+        """Records an episode if it was surprising enough.
 
-        Devolve True se gravou. O limiar é *relativo* à surpresa média
-        corrente: o que conta como digno de nota depende do que é habitual,
-        não de uma constante afinada à mão.
+        Returns True if it recorded. The threshold is *relative* to the
+        running mean surprise: what counts as noteworthy depends on what is
+        usual, not on a hand-tuned constant.
         """
         self._surprise_avg = 0.99 * self._surprise_avg + 0.01 * surprise
         if self._surprise_avg <= 0:
@@ -171,11 +178,12 @@ class EpisodicMemory:
         if surprise < self.cfg.write_threshold * self._surprise_avg:
             return False
 
-        # Se já existe um traço praticamente idêntico, reforça-o em vez de
-        # duplicar. O limiar é apertado de propósito: com 0.95 o armazém
-        # *congelava* — assim que os traços cobriam o espaço de chaves, tudo o
-        # que chegava era considerado repetição e nunca mais entrava nada.
-        # Uma memória que deixa de gravar é um buffer com boas maneiras.
+        # If a practically identical trace already exists, reinforce it
+        # instead of duplicating. The threshold is tight on purpose: with
+        # 0.95 the store *froze* - as soon as the traces covered the key
+        # space, everything arriving was considered a repetition and nothing
+        # ever entered again. A memory that stops recording is a buffer with
+        # good manners.
         self._seen += 1
         sim = self._similarity(key)
         best_idx = int(np.argmax(sim))
@@ -198,13 +206,13 @@ class EpisodicMemory:
         return True
 
     def _victim(self) -> int:
-        """Que slot sacrificar. Devolve -1 para recusar a escrita.
+        """Which slot to sacrifice. Returns -1 to refuse the write.
 
-        Com reservatório, um armazém cheio aceita o episódio novo só com
-        probabilidade n_slots/n_vistos, e nesse caso expulsa um ao acaso. É o
-        algoritmo clássico para manter uma amostra uniforme de um fluxo sem
-        saber de antemão o comprimento dele — e é o que faz com que memórias
-        antigas sobrevivam à chegada de uma tarefa nova.
+        With the reservoir, a full store accepts the new episode only with
+        probability n_slots/n_seen, and in that case evicts one at random.
+        It is the classic algorithm for keeping a uniform sample of a stream
+        without knowing its length in advance - and it is what makes old
+        memories survive the arrival of a new task.
         """
         empty = np.flatnonzero(self.strength <= 0)
         if len(empty):
@@ -216,18 +224,19 @@ class EpisodicMemory:
         return -1
 
     def decay(self) -> None:
-        """Esquecimento passivo. Chamado uma vez por trama."""
+        """Passive forgetting. Called once per frame."""
         if self.cfg.decay < 1.0:
             self.strength *= F(self.cfg.decay)
             self.strength[self.strength < 1e-3] = 0.0
 
     # ------------------------------------------------------------------
     def replay(self, n: int, rng: np.random.Generator) -> list[int]:
-        """Escolhe episódios para consolidar, favorecendo os mais fortes.
+        """Chooses episodes to consolidate, favoring the strongest.
 
-        Os fortes são os que se repetiram ou os que voltaram a ser úteis — o
-        que é exatamente o critério que se quer destilar nos pesos. O que
-        aconteceu uma vez e nunca mais fica na memória rápida até se apagar.
+        The strong ones are those that repeated or were useful again - which
+        is exactly the criterion one wants to distill into the weights. What
+        happened once and never again stays in the fast memory until it
+        fades.
         """
         occupied = np.flatnonzero(self.strength > 0)
         if len(occupied) == 0:

@@ -1,8 +1,9 @@
-"""Laço de treino.
+"""Training loop.
 
-Não há épocas no sentido habitual — a rede é online, aprende trama a trama e
-o estado do topo atravessa o tempo. "Época" aqui é só voltar a passar pela
-mesma sequência, o que num sensor real seria simplesmente mais sinal.
+There are no epochs in the usual sense - the network is online, learns frame
+by frame and the top's state crosses time. An "epoch" here is just passing
+over the same sequence again, which on a real sensor would simply be more
+signal.
 """
 
 from __future__ import annotations
@@ -17,7 +18,7 @@ from .network import PCNetwork
 
 
 def evaluate(net: PCNetwork, frames: np.ndarray, reset: bool = True) -> RunStats:
-    """Corre a sequência sem aprender e sem deixar rasto no estado dinâmico."""
+    """Runs the sequence without learning and without leaving a trace in the dynamic state."""
     snapshot = net.snapshot_state()
     try:
         traces = net.run(frames, learn=False, reset=reset)
@@ -35,14 +36,14 @@ def train(
     on_epoch=None,
     replay_per_epoch: int = 0,
 ) -> list[RunStats]:
-    """Treina e devolve as estatísticas por época (de treino, ou de avaliação).
+    """Trains and returns the per-epoch statistics (training ones, or evaluation ones).
 
-    `replay_per_epoch` intercala reprodução de episódios antigos com a
-    aprendizagem nova. O hipocampo não reproduz só durante o sono — reproduz
-    também em repouso acordado, entrecalado com a experiência. E em
-    aprendizagem contínua é sabido que reproduzir *durante* o treino funciona
-    e reproduzir só no fim não: 64 passos de consolidação contra milhares de
-    passos de tarefa nova não movem nada.
+    `replay_per_epoch` interleaves replay of old episodes with the new
+    learning. The hippocampus does not replay only during sleep - it also
+    replays during quiet wakefulness, interleaved with experience. And in
+    continual learning it is well known that replaying *during* training
+    works and replaying only at the end does not: 64 consolidation steps
+    against thousands of new-task steps move nothing.
     """
     history: list[RunStats] = []
     for ep in range(epochs):
@@ -61,10 +62,11 @@ def train(
 
 
 def evaluate_with_theta(net: PCNetwork, frames: np.ndarray, theta: float) -> RunStats:
-    """Avalia com outro limiar de esparsidade, sem mexer no treino.
+    """Evaluates with a different sparsity threshold, without touching training.
 
-    O limiar é um botão de *inferência*: mudá-lo não requer treinar de novo,
-    é literalmente decidir quanto ruído se aceita não converter no ADC.
+    The threshold is an *inference* knob: changing it does not require
+    retraining, it is literally deciding how much noise you accept not
+    converting in the ADC.
     """
     original = net.cfg
     try:
@@ -81,5 +83,5 @@ def theta_sweep(
 
 
 def make_net(seed: int = 0, **overrides) -> PCNetwork:
-    """Atalho: rede com a config default e as alterações pedidas."""
+    """Shortcut: network with the default config plus the requested overrides."""
     return PCNetwork(PCConfig(seed=seed, **overrides))

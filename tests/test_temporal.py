@@ -1,4 +1,4 @@
-"""Escalas de tempo hierárquicas."""
+"""Hierarchical timescales."""
 
 import numpy as np
 import pytest
@@ -24,7 +24,7 @@ def test_timescales_never_exceed_one():
 
 
 def test_parameter_cost_diagonal_vs_dense():
-    """A versão diagonal é uma constante de tempo por unidade, e mais nada."""
+    """The diagonal version is one time constant per unit, and nothing more."""
     assert make("diagonal", n=16).n_params == 16
     assert make("dense", n=16).n_params == 256
     assert make("none", n=16).n_params == 0
@@ -37,14 +37,14 @@ def test_no_transition_is_pure_retention():
 
 
 def test_small_lambda_means_long_memory():
-    """λ→0: o nível guarda o que tinha, seja o que for que B diga."""
+    """λ→0: the level keeps what it had, whatever B may say."""
     slow = make("dense", n=6, lam=0.02)
     z = np.full(6, 0.5, dtype=F)
     assert np.allclose(slow.predict(z), np.tanh(z), atol=0.05)
 
 
 def test_learning_closes_a_temporal_pattern():
-    """Com um par (antes, depois) fixo, a transição tem de aprender o passo."""
+    """With a fixed (before, after) pair, the transition has to learn the step."""
     t = make("dense", n=6, lam=1.0)
     z_prev = np.array([0.5, -0.3, 0.2, 0.1, -0.4, 0.0], dtype=F)
     target = np.array([-0.3, 0.5, 0.1, 0.2, 0.0, -0.4], dtype=F)
@@ -59,10 +59,10 @@ def test_learning_closes_a_temporal_pattern():
 
 
 def test_diagonal_cannot_permute_but_dense_can():
-    """Uma constante de tempo por unidade só escala; não roda nem mistura.
+    """One time constant per unit only scales; it does not rotate or mix.
 
-    É por isto que a versão diagonal não serve para sinais oscilatórios: o que
-    é preciso prever é um avanço de fase, que é uma rotação.
+    This is why the diagonal version is no good for oscillatory signals: what
+    needs to be predicted is a phase advance, which is a rotation.
     """
     z_prev = np.array([1.0, 0.0], dtype=F)
     target = np.array([0.0, 1.0], dtype=F)

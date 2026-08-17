@@ -1,17 +1,18 @@
-"""A unidade base: uma camada preditiva.
+"""The base unit: a predictive layer.
 
-    ẑ_l = f(W_l · z_{l+1})        # a camada de cima PREVÊ a de baixo
-    ε_l = z_l − ẑ_l               # só o erro sobe
-    Δz_{l+1} ∝ W_lᵀ · (ε_l ⊙ f')  # o estado de cima ajusta-se
-    ΔW_l ∝ (ε_l ⊙ f') · z_{l+1}ᵀ  # aprendizagem local Hebbiana
+    ẑ_l = f(W_l · z_{l+1})        # the layer above PREDICTS the one below
+    ε_l = z_l − ẑ_l               # only the error rises
+    Δz_{l+1} ∝ W_lᵀ · (ε_l ⊙ f')  # the state above adjusts itself
+    ΔW_l ∝ (ε_l ⊙ f') · z_{l+1}ᵀ  # local Hebbian learning
 
-Nada aqui vê o resto da rede: `learn` usa apenas o erro que está na camada e o
-estado que está imediatamente acima — as duas quantidades que existem
-fisicamente na sinapse. É essa restrição que torna o C trivial (não há grafo,
-não há ativações guardadas) e que permite treinar em hardware analógico.
+Nothing here sees the rest of the network: `learn` uses only the error that
+is in the layer and the state immediately above - the two quantities that
+physically exist at the synapse. That restriction is what makes the C
+trivial (no graph, no stored activations) and what allows training on analog
+hardware.
 
-Convenção de forma: W tem forma (n_abaixo, n_acima), C-contígua, float32 — a
-mesma memória que o crossbar vai ter, linha = neurónio de baixo.
+Shape convention: W has shape (n_below, n_above), C-contiguous, float32 -
+the same memory the crossbar will have, row = neuron below.
 """
 
 from __future__ import annotations
@@ -23,7 +24,7 @@ from .dtypes import F
 
 
 class PCLayer:
-    """Gerador de um nível: prevê `n_below` a partir de `n_above`."""
+    """Generator of one level: predicts `n_below` from `n_above`."""
 
     __slots__ = (
         "n_below", "n_above", "W", "W_eff", "device",
@@ -46,33 +47,35 @@ class PCLayer:
         self._f, self._fprime = activations.get(activation)
         self.device = None
 
-        # ~1/sqrt(fan_in): mantém a pré-ativação em O(1) e o tanh fora da
-        # saturação, que é onde a derivada morre e a aprendizagem local para.
+        # ~1/sqrt(fan_in): keeps the pre-activation at O(1) and the tanh out
+        # of saturation, which is where the derivative dies and local
+        # learning stops.
         scale = init_scale / np.sqrt(self.n_above)
         self.W = (rng.standard_normal((self.n_below, self.n_above)) * scale).astype(F)
-        # Sem dispositivo, W_eff é o próprio W (mesma memória, custo zero).
+        # Without a device, W_eff is W itself (same memory, zero cost).
         self.W_eff = self.W
 
-        # Buffers pré-alocados (o C não vai ter malloc; o Python também não).
+        # Preallocated buffers (the C will have no malloc; neither does the
+        # Python).
         self.a = np.zeros(self.n_below, dtype=F)
         self.zhat = np.zeros(self.n_below, dtype=F)
 
-        # Estimativa de σ_max(W_eff) por iteração de potência, para o passo de
-        # assentamento saber quão longe pode ir sem divergir.
+        # Estimate of σ_max(W_eff) by power iteration, so the settling step
+        # knows how far it can go without diverging.
         self._pi_v = (rng.standard_normal(self.n_above)).astype(F)
         self._pi_v /= np.linalg.norm(self._pi_v) or 1.0
         self.sigma_max = 0.0
         self._estimate_sigma_max()
 
-        # Importância de cada sinapse: média corrente do quadrado do seu
-        # próprio gradiente local. É a diagonal da informação de Fisher, que
-        # aqui está disponível na sinapse sem nenhuma passagem para trás.
+        # Importance of each synapse: running mean of the square of its own
+        # local gradient. It is the diagonal of the Fisher information,
+        # available here at the synapse with no backward pass.
         self.importance = np.zeros_like(self.W)
 
-        # Portão de saída (opcional): decide por unidade quanto da previsão
-        # gerada se aplica neste contexto. bias +2 -> g≈0.88: nasce quase
-        # aberto, para começar como a camada sem portões e só fechar onde o
-        # erro o justificar.
+        # Output gate (optional): decides per unit how much of the generated
+        # prediction applies in this context. bias +2 -> g≈0.88: born almost
+        # open, to start like the ungated layer and only close where the
+        # error justifies it.
         if gated:
             self.Gg = (rng.standard_normal((self.n_below, self.n_above))
                        * (0.3 / np.sqrt(self.n_above))).astype(F)
@@ -83,14 +86,14 @@ class PCLayer:
         self._gate = np.ones(self.n_below, dtype=F)
         self._base = np.zeros(self.n_below, dtype=F)
 
-    # -- substrato ----------------------------------------------------------
+    # -- substrate ----------------------------------------------------------
     def attach_device(self, array) -> None:
-        """Passa a inferir com os pesos que o dispositivo tem, não com os pedidos.
+        """Switches to inferring with the weights the device has, not the requested ones.
 
-        `W` continua a ser o peso float que a regra local atualiza — o
-        "shadow weight" do treino consciente da quantização. `W_eff` é o que
-        está mesmo no crossbar. Sem backprop, esta separação é trivial: não há
-        gradiente para passar através do quantizador.
+        `W` remains the float weight the local rule updates - the
+        "shadow weight" of quantization-aware training. `W_eff` is what is
+        actually on the crossbar. Without backprop, this separation is
+        trivial: there is no gradient to pass through the quantizer.
         """
         self.device = array
         self.refresh_device()
@@ -101,27 +104,27 @@ class PCLayer:
         self._estimate_sigma_max()
 
     def refresh_device(self) -> None:
-        """Reprograma o crossbar a partir dos pesos float atuais."""
+        """Reprograms the crossbar from the current float weights."""
         if self.device is None:
             self.W_eff = self.W
         else:
             self.W_eff = self.device.program(self.W)
         self._estimate_sigma_max()
 
-    # -- estabilidade -------------------------------------------------------
+    # -- stability ----------------------------------------------------------
     def _estimate_sigma_max(self, max_iters: int = 32, tol: float = 1e-5) -> None:
-        """Iteração de potência sobre W_eff, com arranque a quente.
+        """Power iteration over W_eff, with warm start.
 
-        Itera até convergir, não um número fixo de vezes. Com arranque a
-        quente são tipicamente 1-2 iterações (W muda devagar entre
-        atualizações), mas trocar de crossbar precisa de mais — e um σ_max
-        subestimado dá um passo de assentamento grande demais, que diverge.
+        Iterates until convergence, not a fixed number of times. With warm
+        start it is typically 1-2 iterations (W changes slowly between
+        updates), but switching crossbars needs more - and an underestimated
+        σ_max gives a settling step too large, which diverges.
 
-        Iterar até convergir faz também com que σ_max seja função só de
-        W_eff, e não do histórico de chamadas: dois modelos com os mesmos
-        pesos comportam-se da mesma maneira, venham eles de treino ou de
-        `load_state_dict`. São dois produtos matriz-vetor por iteração — no
-        crossbar, duas leituras, uma em cada sentido.
+        Iterating to convergence also makes σ_max a function of W_eff only,
+        and not of the call history: two models with the same weights behave
+        the same way, whether they come from training or from
+        `load_state_dict`. It is two matrix-vector products per iteration -
+        on the crossbar, two reads, one in each direction.
         """
         previous = 0.0
         for _ in range(max_iters):
@@ -143,19 +146,19 @@ class PCLayer:
             previous = nv
 
     def max_stable_z_lr(self) -> float:
-        """z_lr < 2/(1 + σ_max²): o passo acima do qual o assentamento diverge.
+        """z_lr < 2/(1 + σ_max²): the step above which settling diverges.
 
-        O Hessiano da energia em ordem ao estado de cima é I + WᵀW, logo o
-        maior valor próprio é 1 + σ_max(W)². É este o número que a
-        variabilidade do dispositivo estraga — não por adicionar ruído à
-        resposta, mas por inflacionar σ_max até o passo fixo deixar de ser
-        estável.
+        The Hessian of the energy with respect to the state above is
+        I + WᵀW, so the largest eigenvalue is 1 + σ_max(W)². This is the
+        number device variability ruins - not by adding noise to the
+        response, but by inflating σ_max until the fixed step stops being
+        stable.
         """
         return 2.0 / (1.0 + self.sigma_max**2)
 
-    # -- caminho descendente: a previsão -----------------------------------
+    # -- descending path: the prediction -----------------------------------
     def predict(self, z_above: np.ndarray) -> np.ndarray:
-        """ẑ = f(W · z_acima). Escreve em buffers internos e devolve ẑ."""
+        """ẑ = f(W · z_above). Writes into internal buffers and returns ẑ."""
         np.dot(self.W_eff, z_above, out=self.a)
         if self.device is not None:
             self.a[:] = self.device.read(self.a)
@@ -168,12 +171,12 @@ class PCLayer:
             self.zhat = self._base
         return self.zhat
 
-    # -- caminho ascendente: o erro ----------------------------------------
+    # -- ascending path: the error -----------------------------------------
     def modulated_error(self, eps_below: np.ndarray) -> np.ndarray:
-        """ε ⊙ [g] ⊙ f'(a): o erro tal como o vê a sinapse.
+        """ε ⊙ [g] ⊙ f'(a): the error as the synapse sees it.
 
-        Com portão, o crédito para W passa por ele — um portão fechado
-        significa "esta previsão não se aplicou aqui", e W não leva culpa.
+        With a gate, the credit for W passes through it - a closed gate
+        means "this prediction did not apply here", and W takes no blame.
         """
         mod = eps_below * self._fprime(self.a)
         if self.Gg is not None:
@@ -181,7 +184,7 @@ class PCLayer:
         return mod.astype(F, copy=False)
 
     def gate_error(self, eps_below: np.ndarray) -> np.ndarray:
-        """ε ⊙ f(Wz) ⊙ g(1-g): o crédito do próprio portão."""
+        """ε ⊙ f(Wz) ⊙ g(1-g): the gate's own credit."""
         assert self.Gg is not None
         return (eps_below * self._base * self._gate * (1.0 - self._gate)).astype(
             F, copy=False
@@ -189,19 +192,19 @@ class PCLayer:
 
     def backward(self, eps_mod: np.ndarray,
                  eps_raw: np.ndarray | None = None) -> np.ndarray:
-        """Wᵀ·(ε⊙[g]⊙f') [+ Gᵀ·(ε⊙f⊙g(1-g))]: a correção que sobe.
+        """Wᵀ·(ε⊙[g]⊙f') [+ Gᵀ·(ε⊙f⊙g(1-g))]: the correction that rises.
 
-        Com portão há dois caminhos para o estado de cima: através da
-        previsão e através da escolha de a aplicar. É o mesmo crossbar lido
-        ao contrário, logo sofre os mesmos desvios de programação e mais uma
-        dose de ruído de leitura.
+        With a gate there are two paths to the state above: through the
+        prediction and through the choice to apply it. It is the same
+        crossbar read backwards, so it suffers the same programming
+        deviations and another dose of read noise.
         """
         out = self.W_eff.T.dot(eps_mod).astype(F, copy=False)
         if self.Gg is not None and eps_raw is not None:
             out = out + self.Gg.T.dot(self.gate_error(eps_raw))
         return self.device.read(out) if self.device is not None else out
 
-    # -- plasticidade -------------------------------------------------------
+    # -- plasticity ---------------------------------------------------------
     def learn(
         self,
         eps_mod: np.ndarray,
@@ -212,10 +215,10 @@ class PCLayer:
         meta: float = 0.0,
         meta_decay: float = 0.999,
     ) -> None:
-        """ΔW = lr · (ε ⊙ f') ⊗ z_acima. Puramente local, in-place.
+        """ΔW = lr · (ε ⊙ f') ⊗ z_above. Purely local, in-place.
 
-        Atualiza sempre o peso float; se houver dispositivo, reprograma-o a
-        seguir (treino consciente da quantização).
+        Always updates the float weight; if there is a device, it is
+        reprogrammed afterwards (quantization-aware training).
         """
         dW = np.outer(eps_mod, z_above).astype(F, copy=False)
         if grad_clip > 0.0:
@@ -224,22 +227,23 @@ class PCLayer:
             self.W *= F(1.0 - lr * weight_decay)
 
         if meta > 0.0:
-            # A sinapse endurece na proporção do que já provou importar.
+            # The synapse hardens in proportion to what it has already proven
+            # to matter.
             self.importance *= F(meta_decay)
             self.importance += F(1.0 - meta_decay) * (dW * dW)
             scale = self.importance / max(float(self.importance.mean()), 1e-12)
             self.W += F(lr) * dW / (1.0 + F(meta) * scale)
         else:
             self.W += F(lr) * dW
-        # Sempre, com ou sem dispositivo: σ_max cresce ao longo do treino e é
-        # ele que fixa o passo de assentamento estável. Sem isto a rede float
-        # ficava com a estimativa da inicialização e o passo adaptativo nunca
-        # chegava a atuar.
+        # Always, with or without a device: σ_max grows over training and it
+        # is what fixes the stable settling step. Without this the float
+        # network kept the initialization's estimate and the adaptive step
+        # never got to act.
         self.refresh_device()
 
     def learn_gate(self, eps_raw: np.ndarray, z_above: np.ndarray,
                    lr: float, grad_clip: float = 0.0) -> None:
-        """ΔG ∝ (ε ⊙ f(Wz) ⊙ g(1-g)) ⊗ z. Três fatores, local."""
+        """ΔG ∝ (ε ⊙ f(Wz) ⊙ g(1-g)) ⊗ z. Three factors, local."""
         if self.Gg is None:
             return
         mod = self.gate_error(eps_raw)
@@ -249,16 +253,16 @@ class PCLayer:
         self.Gg += F(lr) * dG
         self.bg += F(lr) * mod
 
-    # -- contabilidade de energia ------------------------------------------
+    # -- energy accounting --------------------------------------------------
     def macs_down(self) -> int:
-        """MACs da previsão: sempre densa (é o crossbar a fazê-la em analógico)."""
+        """MACs of the prediction: always dense (it is the crossbar doing it in analog)."""
         return self.n_below * self.n_above
 
     def macs_up(self, nnz_eps: int) -> int:
-        """MACs do erro a subir: proporcionais aos erros que passam o limiar."""
+        """MACs of the rising error: proportional to the errors that pass the threshold."""
         return int(nnz_eps) * self.n_above
 
-    def __repr__(self) -> str:  # pragma: no cover - conveniência
+    def __repr__(self) -> str:  # pragma: no cover - convenience
         return (
             f"PCLayer({self.n_above} -> {self.n_below}, act={self.act_name!r})"
         )

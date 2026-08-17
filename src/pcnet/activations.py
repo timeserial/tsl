@@ -1,8 +1,8 @@
-"""Ativações e a sua derivada.
+"""Activations and their derivative.
 
-Mantidas deliberadamente pobres: `tanh` e identidade. Tudo o que aqui estiver
-tem de ter uma tradução trivial para C com inteiros (tanh -> LUT de 256
-entradas), caso contrário não cabe no crossbar.
+Kept deliberately poor: `tanh` and identity. Anything placed here must have
+a trivial translation to C with integers (tanh -> 256-entry LUT), otherwise
+it does not fit in the crossbar.
 """
 
 from __future__ import annotations
@@ -12,9 +12,9 @@ import numpy as np
 from .dtypes import F
 
 # --------------------------------------------------------------------------
-# f(a) e f'(a). A derivada é escrita em função de *a* (a pré-ativação) para
-# que a assinatura seja igual em todas as ativações; em C guardamos apenas
-# `a` por nível, um array estático por camada.
+# f(a) and f'(a). The derivative is written as a function of *a* (the
+# pre-activation) so that the signature is the same across all activations;
+# in C we store only `a` per level, one static array per layer.
 # --------------------------------------------------------------------------
 
 
@@ -42,10 +42,10 @@ ACTIVATIONS = {
 
 
 def get(name: str):
-    """Devolve o par (f, f') registado sob `name`."""
+    """Returns the (f, f') pair registered under `name`."""
     try:
         return ACTIVATIONS[name]
-    except KeyError:  # pragma: no cover - erro de configuração
+    except KeyError:  # pragma: no cover - configuration error
         raise ValueError(
             f"ativação desconhecida: {name!r} (conhecidas: {sorted(ACTIVATIONS)})"
         ) from None

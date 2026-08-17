@@ -1,89 +1,91 @@
-# Inferência em C — passo 3
+# Inference in C - step 3
 
-Ainda vazio. Este ficheiro fixa o contrato para que o passo 3 seja tradução e
-não redesenho.
+Still empty. This file fixes the contract so that step 3 is a translation and
+not a redesign.
 
-## O que o Python já garante
+## What the Python already guarantees
 
-O núcleo de inferência não usa nada que não exista em C89 com inteiros:
+The inference core uses nothing that does not exist in C89 with integers:
 
-- Sem autograd, sem grafo, sem ativações guardadas — a regra de aprendizagem
-  é local, por isso a inferência só precisa dos pesos e dos estados atuais.
-- Sem alocação: todos os arrays têm tamanho conhecido em tempo de compilação
-  (`pc_sizes` em `model.h`).
-- `float32` em todo o lado (`pcnet/dtypes.py`), nunca `float64`, para que o
-  Python e o C não divirjam em bits difíceis de explicar depois.
-- Uma única não-linearidade, `tanh`, que no destino é uma LUT de 256 entradas.
-- Saturação explícita (`z_clip`, `z_max`) em vez de confiar no alcance —
-  em int8 isto é o comportamento natural do hardware, não código extra.
+- No autograd, no graph, no stored activations - the learning rule
+  is local, so inference only needs the weights and the current states.
+- No allocation: all arrays have sizes known at compile time
+  (`pc_sizes` in `model.h`).
+- `float32` everywhere (`pcnet/dtypes.py`), never `float64`, so that
+  Python and C do not diverge in bits that are hard to explain later.
+- A single nonlinearity, `tanh`, which on the target is a 256-entry LUT.
+- Explicit saturation (`z_clip`, `z_max`) instead of trusting the range -
+  in int8 this is the hardware's natural behavior, not extra code.
 
-## Artefactos gerados
+## Generated artifacts
 
-`python3 scripts/run_phase0.py` escreve para `runs/phase0/`:
+`python3 scripts/run_phase0.py` writes to `runs/phase0/`:
 
-- `model.h` — `pc_sizes`, `pc_W0..pc_W2`, `pc_A` e os `#define` da config
+- `model.h` - `pc_sizes`, `pc_W0..pc_W2`, `pc_A` and the config `#define`s
   (`PC_MAX_ITERS`, `PC_Z_LR`, `PC_THETA`, `PC_Z_CLIP`, `PC_Z_MAX`,
   `PC_SETTLE_TOL`, `PC_SETTLE_MIN_GAIN`).
-- `golden.h` — `PC_GOLDEN_N` tramas de entrada, a previsão em malha aberta,
-  o estado do topo depois do assentamento e o nº de iterações por trama.
+- `golden.h` - `PC_GOLDEN_N` input frames, the open-loop prediction,
+  the top state after settling and the number of iterations per frame.
 
-## O teste honesto
+## The honest test
 
-O C tem de reproduzir `pc_golden_pred` e `pc_golden_top` a partir de
-`pc_golden_input`, com estado inicial a zeros e sem aprender.
+The C must reproduce `pc_golden_pred` and `pc_golden_top` from
+`pc_golden_input`, with initial state at zeros and without learning.
 
-**Mas não trama a trama, e não pelo nº de iterações.** O critério de paragem é
-uma decisão discreta: uma diferença de 1e-4 no passo de assentamento — ou uma
-ordem de soma diferente no C, que é garantido acontecer — chega para o laço
-parar uma iteração antes ou depois. Uma iteração muda o estado do topo, que
-atravessa para a trama seguinte. Medido: 0.01% de diferença no passo dá ~0.1
-de diferença numa trama concreta, com a média intacta. Ver
+**But not frame by frame, and not by the number of iterations.** The stopping
+criterion is a discrete decision: a difference of 1e-4 in the settling step -
+or a different summation order in C, which is guaranteed to happen - is
+enough for the loop to stop one iteration earlier or later. One iteration
+changes the top state, which carries over to the next frame. Measured: a
+0.01% difference in the step gives ~0.1 of difference on a specific frame,
+with the mean intact. See
 `test_exit_decision_is_chaotic_but_aggregates_are_stable`.
 
-O que se compara, então:
+What gets compared, then:
 
-1. **Uma única trama, uma única iteração forçada** (`PC_MAX_ITERS = 1`, sem
-   early exit): aí sim, exato a ~1e-5. É isto que valida a aritmética.
-2. **Agregados sobre `PC_GOLDEN_N` tramas**: RMSE médio dentro de ~5%, nº
-   médio de iterações dentro de ±1. É isto que valida o comportamento.
+1. **A single frame, a single forced iteration** (`PC_MAX_ITERS = 1`, no
+   early exit): there, yes, exact to ~1e-5. This is what validates the
+   arithmetic.
+2. **Aggregates over `PC_GOLDEN_N` frames**: mean RMSE within ~5%, mean
+   number of iterations within ±1. This is what validates the behavior.
 
-`pc_golden_iters` serve de referência para a média, não para comparação
-elemento a elemento. Um C que bata a aritmética no ponto 1 e os agregados no
-ponto 2 está correto; um que bata as tramas todas exatamente está a ter sorte.
+`pc_golden_iters` serves as a reference for the mean, not for
+element-by-element comparison. A C implementation that matches the arithmetic
+in point 1 and the aggregates in point 2 is correct; one that matches all the
+frames exactly is getting lucky.
 
-Se a inferência não couber em C simples com inteiros, não cabe no crossbar.
-Essa é a razão de existir deste passo; ver secção 6 do `CONTEXTO.md`.
+If inference does not fit in simple C with integers, it does not fit in the
+crossbar. That is this step's reason to exist; see section 6 of `CONTEXTO.md`.
 
 
-## Estado (atualizado): a célula de dois tempos JÁ ESTÁ em C
+## Status (updated): the two-stroke cell is ALREADY in C
 
-`c/twostroke.c` implementa inferência E aprendizagem da célula rasa portada
-(64→24) em C99 puro: três primitivas (matvec, matvec transposto, escrita
-rank-1 — as três operações nativas do crossbar), zero malloc, ~11 KB.
-Validada contra `c/golden_twostroke.h` (gerado por scripts/gen_golden_c.py):
-uma atualização exata a 3e-8; trajetória de 300 janelas a 0.00% do Python.
+`c/twostroke.c` implements inference AND learning of the gated shallow cell
+(64→24) in pure C99: three primitives (matvec, transposed matvec, rank-1
+write - the three native operations of the crossbar), zero malloc, ~11 KB.
+Validated against `c/golden_twostroke.h` (generated by scripts/gen_golden_c.py):
+one update exact to 3e-8; a 300-window trajectory at 0.00% of the Python.
 
-Compilar e validar:  cc -std=c99 -O2 c/twostroke.c -lm -Ic && ./a.out
+Compile and validate:  cc -std=c99 -O2 c/twostroke.c -lm -Ic && ./a.out
 
-Próximos degraus: LUTs para tanh/σ (256 entradas), acumuladores int16/pesos
-int8, e o mesmo ficheiro no ESP32/Arduino.
+Next rungs: LUTs for tanh/σ (256 entries), int16 accumulators/int8
+weights, and the same file on the ESP32/Arduino.
 
-## Ponto fixo (twostroke_fixed.c): VALIDADO — e a história do bug
+## Fixed point (twostroke_fixed.c): VALIDATED - and the story of the bug
 
-A anomalia (resultados idênticos em taxas 4x diferentes) foi caçada até à
-raiz e **não estava no C — estava no contrato**: a dinâmica reduzida do
-golden tinha um ponto fixo em zero (s=0 → tanh(0)=0 → prior=0 → todas as
-atualizações nulas). O "treino" validava uma rede congelada; o float que
-"passava a 0.00%" igualava uma trajetória morta, e a versão inteira que
-"falhava" era a única a aprender (a assimetria da LUT tirava o estado do
-zero). Correção: o contrato ganhou a correção sensorial de um passo
-(s ← prior + 0.2·W0ᵀe, saturada) que o assentamento real faz.
+The anomaly (identical results at 4x different rates) was hunted down to the
+root and **it was not in the C - it was in the contract**: the golden's
+reduced dynamics had a fixed point at zero (s=0 → tanh(0)=0 → prior=0 → all
+updates null). The "training" was validating a frozen network; the float that
+"passed at 0.00%" was matching a dead trajectory, and the integer version
+that "failed" was the only one learning (the LUT's asymmetry pulled the state
+off zero). Fix: the contract gained the one-step sensory correction
+(s ← prior + 0.2·W0ᵀe, saturated) that the real settling performs.
 
-Com o juiz acordado: float 0.00%; ponto fixo Q12 (mestres Q20, LUTs de 256
-com interpolação, zero libm) a −0.1% em treino e avaliação com lr=0.1, e
-devidamente sensível à taxa. **A aprendizagem sobrevive aos inteiros** —
-o último degrau de software antes do metal está cumprido.
+With the judge awake: float 0.00%; Q12 fixed point (Q20 masters, 256-entry
+LUTs with interpolation, zero libm) at -0.1% in training and evaluation with
+lr=0.1, and properly sensitive to the rate. **Learning survives the
+integers** - the last software rung before the metal is done.
 
-Lição para o registo: um contrato de validação também é código e também
-mente; um "PASSA" perfeito merece a mesma desconfiança que um resultado
-perfeito.
+Lesson for the record: a validation contract is also code and it also
+lies; a perfect "PASS" deserves the same suspicion as a perfect result.

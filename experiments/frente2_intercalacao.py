@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""FRENTE 2 do ataque ao crédito local: o intervalo encolhe com intercalação fina?
+"""FRONT 2 of the attack on local credit: does the gap shrink with fine interleaving?
 
     .venv/bin/python experiments/frente2_intercalacao.py
 
-Hipótese: a equivalência regra-local ≈ gradiente só vale com erros pequenos;
-blocos grossos deixam os erros da tarefa adormecida crescer entre visitas.
-Se o intervalo nós-vs-GRU encolher com blocos finos, o preço da localidade é
-na verdade o preço do regime — e ataca-se com currículo, não com mecanismos.
+Hypothesis: the local-rule ≈ gradient equivalence only holds with small errors;
+coarse blocks let the dormant task's errors grow between visits.
+If the us-vs-GRU gap shrinks with fine blocks, the price of locality is
+actually the price of the regime - and it is attacked with curriculum, not with mechanisms.
 
-O alvo re-mede-se com o mesmo bloco: mudar o bloco muda a tarefa para os dois.
-Demora ~40 min; correr com a máquina livre.
+The target is re-measured with the same block: changing the block changes the task for both.
+Takes ~40 min; run with the machine idle.
 """
 import sys; sys.path.insert(0,"src"); sys.path.insert(0,"scripts")
 import numpy as np, torch, torch.nn as nn

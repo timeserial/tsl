@@ -28,9 +28,10 @@ def test_npz_roundtrip_preserves_the_model(tmp_path):
         assert np.array_equal(a, b)
     assert np.array_equal(net.A, clone.A)
 
-    # e, o que interessa, produz as mesmas previsões a partir do mesmo estado.
-    # A tolerância é porque σ_max vem de uma iteração de potência com critério
-    # de paragem relativo: converge à mesma resposta, não aos mesmos bits.
+    # and, what matters, it produces the same predictions from the same state.
+    # The tolerance is because σ_max comes from a power iteration with a
+    # relative stopping criterion: it converges to the same answer, not to the
+    # same bits.
     a = np.array([t.pred_rmse for t in net.run(sig.frames[:20], learn=False, reset=True)])
     b = np.array([t.pred_rmse for t in clone.run(sig.frames[:20], learn=False, reset=True)])
     assert np.allclose(a, b, rtol=1e-3, atol=1e-4)
@@ -45,7 +46,7 @@ def test_c_header_carries_config_and_weights(tmp_path):
     for name, W in (("pc_W0", net.weights[0]), ("pc_W1", net.weights[1])):
         assert f"static const float {name}[{W.shape[0]}][{W.shape[1]}]" in text
     assert "static const float pc_A[4][4]" in text
-    # tantos literais float quantos os pesos
+    # as many float literals as there are weights
     assert text.count("f,") + text.count("f\n") >= sum(W.size for W in net.weights)
 
 
@@ -64,8 +65,8 @@ def test_golden_vectors_match_what_python_did(tmp_path):
     [(0.0, "0.0f"), (2.0, "2.0f"), (-1.0, "-1.0f"), (1e-6, "1e-06f"), (0.5, "0.5f")],
 )
 def test_float_literals_are_valid_c(value, expected):
-    """"0f" é uma constante octal inválida — foi assim que o header parou de
-    compilar da primeira vez."""
+    """"0f" is an invalid octal constant - that is how the header first
+    stopped compiling."""
     assert _c_float(value) == expected
 
 
@@ -78,7 +79,7 @@ def test_non_finite_weights_are_refused():
 
 @pytest.mark.skipif(shutil.which("cc") is None, reason="sem compilador C")
 def test_generated_headers_compile_clean(tmp_path):
-    """O destino é C simples: os headers têm de compilar sem avisos."""
+    """The target is plain C: the headers have to compile without warnings."""
     net, sig = trained()
     write_c_header(tmp_path / "model.h", net)
     write_golden(tmp_path / "golden.h", net, sig.frames, n=4)
@@ -102,11 +103,11 @@ def test_generated_headers_compile_clean(tmp_path):
 
 
 def test_golden_is_reproducible(tmp_path):
-    """O C vai comparar contra isto; tem de ser estável entre execuções.
+    """The C side will compare against this; it has to be stable across runs.
 
-    `write_golden` faz reset ao estado antes de correr, logo escrever duas
-    vezes seguidas — mesmo com o estado sujo pela primeira — tem de dar o
-    mesmo ficheiro.
+    `write_golden` resets the state before running, so writing twice in a row,
+    even with the state dirtied by the first run, has to produce the same
+    file.
     """
     net, sig = trained()
     path = tmp_path / "golden.h"

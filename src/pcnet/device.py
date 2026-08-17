@@ -1,24 +1,25 @@
-"""O substrato: pesos ternários e ruído de dispositivo.
+"""The substrate: ternary weights and device noise.
 
-Passo 2 do plano. A questão é uma só: quanto é que a rede perde quando os
-pesos deixam de ser float32 e passam a ser dispositivos físicos imperfeitos?
+Step 2 of the plan. There is a single question: how much does the network
+lose when the weights stop being float32 and become imperfect physical
+devices?
 
-Três imperfeições, e a distinção entre elas é o que interessa:
+Three imperfections, and the distinction between them is what matters:
 
-  * **Quantização** — o peso passa a {-1,0,1} com um ganho por linha. É
-    determinística e conhecida.
-  * **Variabilidade de programação** — cada dispositivo fica com uma
-    condutância ligeiramente diferente da pedida, e *fica assim*. É amostrada
-    uma vez, na programação, e não se pode tirar a média por cima: é o erro
-    que realmente testa a tolerância da arquitetura.
-  * **Ruído de leitura** — muda a cada MAC. Este sim, o ciclo de assentamento
-    tem hipótese de o diluir ao longo das iterações.
+  * **Quantization** - the weight becomes {-1,0,1} with a per-row gain. It is
+    deterministic and known.
+  * **Programming variability** - each device ends up with a conductance
+    slightly different from the requested one, and *stays that way*. It is
+    sampled once, at programming time, and cannot be averaged away: it is the
+    error that truly tests the architecture's tolerance.
+  * **Read noise** - changes on every MAC. This one the settling loop does
+    have a chance to dilute across iterations.
 
-Confundir as duas últimas é a forma mais fácil de exagerar a tolerância a
-ruído de um sistema analógico, por isso estão separadas no modelo.
+Confusing the last two is the easiest way to overstate the noise tolerance
+of an analog system, which is why they are kept separate in the model.
 
-A quantização do ADC entra noutro sítio: em `PCNetwork._threshold`, que é
-onde o erro atravessa a fronteira analógico→digital.
+ADC quantization enters elsewhere: in `PCNetwork._threshold`, which is
+where the error crosses the analog→digital boundary.
 """
 
 from __future__ import annotations
@@ -32,34 +33,35 @@ from .dtypes import F
 
 @dataclass(frozen=True)
 class DeviceModel:
-    """Parâmetros do substrato. Tudo a 0/False = float32 ideal."""
+    """Substrate parameters. Everything at 0/False = ideal float32."""
 
-    # --- quantização ------------------------------------------------------
+    # --- quantization -----------------------------------------------------
     ternary: bool = False
-    # Limiar TWN: Δ = ternary_threshold × média(|W|). 0.75 é o valor de
-    # Li & Liu (2016); acima disso zera-se demasiado, abaixo perde-se o
-    # benefício de esparsidade.
+    # TWN threshold: Δ = ternary_threshold × mean(|W|). 0.75 is the value of
+    # Li & Liu (2016); above that too much is zeroed, below it the sparsity
+    # benefit is lost.
     ternary_threshold: float = 0.75
-    # Ganho por linha (um amplificador de leitura por neurónio de saída) em
-    # vez de um ganho único por matriz. Fisicamente realizável e bastante
-    # melhor, porque as linhas têm escalas muito diferentes.
+    # Per-row gain (one sense amplifier per output neuron) instead of a
+    # single gain per matrix. Physically realizable and considerably better,
+    # because the rows have very different scales.
     per_row_scale: bool = True
 
-    # --- variabilidade de programação (estática) --------------------------
-    sigma_rel: float = 0.0  # desvio proporcional ao peso programado
-    sigma_abs: float = 0.0  # desvio absoluto (fuga, offset)
-    stuck_frac: float = 0.0  # fração de dispositivos presos a zero
+    # --- programming variability (static) ---------------------------------
+    sigma_rel: float = 0.0  # deviation proportional to the programmed weight
+    sigma_abs: float = 0.0  # absolute deviation (leakage, offset)
+    stuck_frac: float = 0.0  # fraction of devices stuck at zero
 
-    # --- ruído de leitura (dinâmico, por MAC) -----------------------------
+    # --- read noise (dynamic, per MAC) ------------------------------------
     read_sigma: float = 0.0
 
     # --- ADC ---------------------------------------------------------------
-    adc_bits: int = 0  # 0 = sem quantização
-    adc_range: float = 2.0  # fundo de escala, ±adc_range
+    adc_bits: int = 0  # 0 = no quantization
+    adc_range: float = 2.0  # full scale, ±adc_range
 
-    # A transição temporal A é 64 pesos contra 2688 dos geradores, e no
-    # desenho é a via rápida — um SSM pequeno que faz sentido manter digital.
-    # Por omissão fica fora do crossbar; pôr a True testa essa suposição.
+    # The temporal transition A is 64 weights against the generators' 2688,
+    # and in the design it is the fast path - a small SSM that makes sense to
+    # keep digital. By default it stays out of the crossbar; setting it to
+    # True tests that assumption.
     include_transition: bool = False
 
     seed: int = 0
@@ -80,16 +82,16 @@ class DeviceModel:
 
 
 # ---------------------------------------------------------------------------
-# quantização
+# quantization
 # ---------------------------------------------------------------------------
 def ternarize(
     W: np.ndarray, threshold: float = 0.75, per_row: bool = True
 ) -> tuple[np.ndarray, np.ndarray]:
-    """W ≈ escala · T, com T em {-1, 0, 1}.
+    """W ≈ scale · T, with T in {-1, 0, 1}.
 
-    Devolve (T, escala). A escala é por linha se `per_row`, senão um escalar
-    replicado — em qualquer caso com forma (n_linhas, 1) para multiplicar
-    diretamente.
+    Returns (T, scale). The scale is per row if `per_row`, otherwise a
+    replicated scalar - in either case with shape (n_rows, 1) so it can
+    multiply directly.
     """
     W = np.asarray(W, dtype=F)
     absW = np.abs(W)
@@ -112,14 +114,14 @@ def ternarize(
 
 
 # ---------------------------------------------------------------------------
-# uma matriz de pesos tal como existe no substrato
+# a weight matrix as it exists on the substrate
 # ---------------------------------------------------------------------------
 class AnalogArray:
-    """Os desvios fixos de um crossbar concreto, amostrados uma única vez.
+    """The fixed deviations of a concrete crossbar, sampled a single time.
 
-    `program(W)` pega nos pesos que o treino quer e devolve os que o
-    dispositivo realmente tem. Os desvios não são re-amostrados a cada
-    chamada — é isso que os torna variabilidade de programação e não ruído.
+    `program(W)` takes the weights training wants and returns the ones the
+    device actually has. The deviations are not re-sampled on each call -
+    that is what makes them programming variability and not noise.
     """
 
     __slots__ = ("model", "shape", "_rel", "_abs", "_alive", "_rng")
@@ -142,12 +144,12 @@ class AnalogArray:
         self._alive = (
             (rng.random(shape) >= model.stuck_frac) if model.stuck_frac else None
         )
-        # RNG separado para o ruído de leitura: o dinâmico não pode partilhar
-        # a sequência com o estático, senão reprogramar muda o ruído.
+        # Separate RNG for read noise: the dynamic one cannot share the
+        # sequence with the static one, otherwise reprogramming changes the noise.
         self._rng = np.random.default_rng(seed + 1_000_003)
 
     def program(self, W: np.ndarray) -> np.ndarray:
-        """Pesos pedidos -> pesos que o dispositivo tem."""
+        """Requested weights -> weights the device has."""
         m = self.model
         if m.ternary:
             T, scale = ternarize(W, m.ternary_threshold, m.per_row_scale)
@@ -164,7 +166,7 @@ class AnalogArray:
         return W_eff
 
     def read(self, out: np.ndarray) -> np.ndarray:
-        """Ruído de leitura, re-amostrado a cada MAC."""
+        """Read noise, re-sampled on every MAC."""
         s = self.model.read_sigma
         if not s:
             return out
@@ -172,9 +174,9 @@ class AnalogArray:
 
 
 def quantize_adc(x: np.ndarray, bits: int, full_scale: float) -> np.ndarray:
-    """Quantização uniforme com saturação em ±full_scale.
+    """Uniform quantization with saturation at ±full_scale.
 
-    `bits` conta o sinal: 8 bits -> 256 níveis sobre 2·full_scale.
+    `bits` includes the sign: 8 bits -> 256 levels over 2·full_scale.
     """
     if bits <= 0:
         return x

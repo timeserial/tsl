@@ -1,15 +1,15 @@
-"""Sinais de brinquedo: o "sensor".
+"""Toy signals: the "sensor".
 
-O problema é o mais simples que ainda tem a estrutura certa: prever a próxima
-amostra de um sinal contínuo. O sinal é maioritariamente banal (soma de
-sinusóides com amplitude a derivar lentamente) e de vez em quando acontece
-alguma coisa — um transitório. É esse contraste que torna visível a
-afirmação central: previsão certa ≈ silêncio ≈ custo zero, e o compute sobe
-só quando a surpresa sobe.
+The problem is the simplest one that still has the right structure: predict
+the next sample of a continuous signal. The signal is mostly mundane (a sum
+of sinusoids with slowly drifting amplitude) and every now and then something
+happens - a transient. That contrast is what makes the central claim
+visible: correct prediction ≈ silence ≈ zero cost, and compute only rises
+when surprise rises.
 
-As tramas são janelas *não sobrepostas* de `frame_len` amostras. Sobrepor
-tornaria a tarefa trivial (63 das 64 amostras já teriam sido vistas) e o
-resultado seria uma medição vaidosa.
+Frames are *non-overlapping* windows of `frame_len` samples. Overlapping
+would make the task trivial (63 of the 64 samples would already have been
+seen) and the result would be a vain measurement.
 """
 
 from __future__ import annotations
@@ -20,20 +20,21 @@ import numpy as np
 
 from .dtypes import F
 
-# Frequências em ciclos/amostra, incomensuráveis entre si: nenhuma trama é
-# uma cópia da anterior, logo o topo tem mesmo de aprender uma transição.
-# Calibradas para tramas de 64 amostras — ver `scaled_freqs`.
+# Frequencies in cycles/sample, mutually incommensurable: no frame is a
+# copy of the previous one, so the top really has to learn a transition.
+# Calibrated for 64-sample frames - see `scaled_freqs`.
 DEFAULT_FREQS = (0.031, 0.017, 0.0071)
 REFERENCE_FRAME_LEN = 64
 
 
 def scaled_freqs(frame_len: int) -> tuple[float, ...]:
-    """Mantém o conteúdo de uma trama constante quando a trama muda de tamanho.
+    """Keeps the content of a frame constant when the frame changes size.
 
-    O que torna o problema difícil não é a frequência absoluta, é quanta fase
-    avança dentro de uma trama e entre tramas. Sem esta escala, encolher a
-    rede para 32 unidades sensoriais muda a *tarefa* ao mesmo tempo que muda o
-    modelo, e não se sabe a quem atribuir a diferença.
+    What makes the problem hard is not the absolute frequency, it is how
+    much phase advances within a frame and between frames. Without this
+    scaling, shrinking the network to 32 sensory units changes the *task* at
+    the same time as the model, and there is no telling which one to credit
+    for the difference.
     """
     k = REFERENCE_FRAME_LEN / frame_len
     return tuple(f * k for f in DEFAULT_FREQS)
@@ -41,19 +42,19 @@ def scaled_freqs(frame_len: int) -> tuple[float, ...]:
 
 @dataclass
 class ToySignal:
-    """Sinal + tramas + onde estão os eventos surpreendentes."""
+    """Signal + frames + where the surprising events are."""
 
     samples: np.ndarray  # (n_samples,)
     frames: np.ndarray  # (n_frames, frame_len)
     frame_len: int
-    event_frames: np.ndarray  # índices de tramas que contêm um transitório
+    event_frames: np.ndarray  # indices of frames that contain a transient
 
     @property
     def n_frames(self) -> int:
         return self.frames.shape[0]
 
     def split(self, train_frac: float = 0.8) -> tuple["ToySignal", "ToySignal"]:
-        """Corte temporal: treino no início, teste no fim (sem baralhar)."""
+        """Temporal cut: train at the start, test at the end (no shuffling)."""
         cut = int(self.n_frames * train_frac)
         return self._slice(0, cut), self._slice(cut, self.n_frames)
 
@@ -69,7 +70,7 @@ class ToySignal:
 
 
 def frame_signal(samples: np.ndarray, frame_len: int) -> np.ndarray:
-    """Corta o sinal em tramas não sobrepostas, descartando a cauda."""
+    """Cuts the signal into non-overlapping frames, discarding the tail."""
     n = (len(samples) // frame_len) * frame_len
     return np.asarray(samples[:n], dtype=F).reshape(-1, frame_len)
 
@@ -85,11 +86,11 @@ def make_signal(
     event_len: int = 12,
     seed: int = 0,
 ) -> ToySignal:
-    """Gera o sinal de brinquedo.
+    """Generates the toy signal.
 
-    `n_events` transitórios são injetados em tramas ao acaso (nunca nas
-    primeiras, para a rede ter tempo de aprender o que é "normal").
-    `freqs=None` escala as frequências ao tamanho da trama.
+    `n_events` transients are injected into frames at random (never the
+    first ones, so the network has time to learn what "normal" is).
+    `freqs=None` scales the frequencies to the frame size.
     """
     rng = np.random.default_rng(seed)
     if freqs is None:
@@ -100,11 +101,11 @@ def make_signal(
     x = np.zeros(n_samples, dtype=np.float64)
     for i, f in enumerate(freqs):
         phase = rng.uniform(0, 2 * np.pi)
-        # amplitude a derivar devagar: a rede tem de continuar a acompanhar
+        # amplitude drifting slowly: the network has to keep tracking
         am = 1.0 + 0.3 * np.sin(2 * np.pi * am_rate * (i + 1) * t + phase)
         x += am * np.sin(2 * np.pi * f * t + phase)
 
-    x /= np.max(np.abs(x)) + 1e-9  # amplitude em [-1, 1]
+    x /= np.max(np.abs(x)) + 1e-9  # amplitude in [-1, 1]
 
     event_frames: list[int] = []
     if n_events > 0:
@@ -131,9 +132,9 @@ def make_signal(
 
 
 def persistence_nrmse(frames: np.ndarray) -> float:
-    """Linha de base honesta: prever que a trama seguinte é igual à anterior.
+    """Honest baseline: predict that the next frame equals the previous one.
 
-    Se a rede não bater isto, não aprendeu nada de temporal.
+    If the network does not beat this, it learned nothing temporal.
     """
     frames = np.asarray(frames, dtype=F)
     if len(frames) < 2:

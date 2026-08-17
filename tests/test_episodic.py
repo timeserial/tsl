@@ -1,4 +1,4 @@
-"""Memória episódica: gravar na hora, consolidar depois."""
+"""Episodic memory: record on the spot, consolidate later."""
 
 import numpy as np
 import pytest
@@ -19,8 +19,8 @@ def episode(m, key, value, surprise=100.0):
 
 # --------------------------------------------------------------------------
 def test_only_surprising_things_get_written():
-    """O limiar é relativo ao habitual: o que é digno de nota depende do que
-    costuma acontecer, não de uma constante afinada à mão."""
+    """The threshold is relative to the usual: what is noteworthy depends on
+    what tends to happen, not on a hand-tuned constant."""
     m = mem(write_threshold=2.0)
     for _ in range(200):
         episode(m, [1, 0, 0, 0], [1, 0, 0, 0, 0, 0], surprise=1.0)
@@ -30,8 +30,8 @@ def test_only_surprising_things_get_written():
 
 
 def test_recall_is_by_content_not_by_address():
-    """Um pedaço do contexto chega para trazer o episódio — completação de
-    padrões, não indexação."""
+    """A piece of the context is enough to bring back the episode - pattern
+    completion, not indexing."""
     m = mem(read_threshold=0.5)
     episode(m, [1, 0, 0, 0], [9, 9, 9, 0, 0, 0])
     value, conf = m.read(np.array([0.9, 0.1, 0.0, 0.0], dtype=F))
@@ -40,7 +40,7 @@ def test_recall_is_by_content_not_by_address():
 
 
 def test_an_unfamiliar_context_gets_no_opinion():
-    """Uma memória que opina sempre é uma memória que injeta ruído."""
+    """A memory that always has an opinion is a memory that injects noise."""
     m = mem(read_threshold=0.6)
     episode(m, [1, 0, 0, 0], [5, 0, 0, 0, 0, 0])
     value, conf = m.read(np.array([0, 0, 1, 0], dtype=F))
@@ -58,7 +58,7 @@ def test_a_repeated_context_reinforces_instead_of_duplicating():
 
 
 def test_the_budget_is_fixed():
-    """Memória que cresce com o tempo não cabe num dispositivo."""
+    """A memory that grows over time does not fit on a device."""
     m = mem(n_slots=8)
     for i in range(200):
         key = np.zeros(4, dtype=F)
@@ -68,25 +68,25 @@ def test_the_budget_is_fixed():
 
 
 def test_reservoir_keeps_a_sample_of_the_whole_history():
-    """O armazém tem de guardar uma amostra de *tudo* o que viu, não os
-    últimos que chegaram.
+    """The store has to keep a sample of *everything* it has seen, not the
+    last arrivals.
 
-    Sem isto, uma tarefa nova varre o armazém em minutos e a consolidação
-    fica sem nada de antigo para reproduzir — que é a diferença entre uma
-    memória e um buffer.
+    Without this, a new task sweeps the store in minutes and consolidation is
+    left with nothing old to replay - which is the difference between a memory
+    and a buffer.
     """
-    # write_threshold=0 desliga o filtro de surpresa: aqui testa-se o
-    # reservatório isoladamente.
+    # write_threshold=0 turns off the surprise filter: here the reservoir
+    # is tested in isolation.
     m = mem(n_slots=16, reservoir=True, write_threshold=0.0)
     rng = np.random.default_rng(0)
     n_stream = 500
     for i in range(n_stream):
         key = rng.standard_normal(4).astype(F)
-        episode(m, key, np.full(6, i, dtype=F))  # o valor marca a idade
+        episode(m, key, np.full(6, i, dtype=F))  # the value marks the age
 
     ages = m.values[m.strength > 0][:, 0]
     assert len(ages) == 16
-    # espalhados por toda a história, não amontoados no fim
+    # spread across the whole history, not piled up at the end
     assert ages.min() < 0.25 * n_stream
     assert ages.max() > 0.75 * n_stream
     assert 0.25 * n_stream < float(ages.mean()) < 0.75 * n_stream
@@ -108,9 +108,9 @@ def test_replay_on_an_empty_memory_is_harmless():
 
 
 def test_the_store_never_freezes():
-    """Depois de cobrir o espaço de chaves, tem de continuar a aceitar coisas
-    novas. Com o limiar de fusão a 0.95 deixava — e uma memória que deixa de
-    gravar é um buffer com boas maneiras."""
+    """After covering the key space, it has to keep accepting new things. With
+    the merge threshold at 0.95 it stopped - and a memory that stops recording
+    is a buffer with good manners."""
     m = mem(n_slots=16, write_threshold=0.0)
     for i in range(120):
         angle = 2 * np.pi * i / 120
@@ -123,7 +123,7 @@ def test_the_store_never_freezes():
 
 
 # --------------------------------------------------------------------------
-# integração com a rede
+# integration with the network
 # --------------------------------------------------------------------------
 def small_net(**kw):
     return PCNetwork(PCConfig.recommended(sizes=(32, 16, 8), **kw))
@@ -152,7 +152,7 @@ def test_detaching_the_memory_restores_the_plain_network():
 
 
 def test_consolidation_replays_without_disturbing_the_running_state():
-    """O sono é offline: não pode mexer no estado de quem está a observar."""
+    """Sleep is offline: it cannot touch the state of whoever is watching."""
     net = small_net()
     net.attach_memory(EpisodicConfig(n_slots=32))
     net.run(small_signal(150).frames, learn=True)

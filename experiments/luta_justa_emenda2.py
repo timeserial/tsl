@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
-"""EMENDA Nº2 (pré-registada antes de qualquer resultado): luta justa real,
-agora com a receita anti-bacia nos DOIS lados.
+"""AMENDMENT No. 2 (pre-registered before any result): a real fair fight,
+now with the anti-basin recipe on BOTH sides.
 
-Mudanças face à Fila 13, todas declaradas aqui:
-- Treino (ambos os lados): 2 réplicas por medição, escolhida pelo ERRO DE
-  TREINO (nunca validação nem teste) — a receita que funcionou na Fila 12.
-- Nosso treino: recozimento lr 0.1→0.02 (0.99^ep). Seleção 150 ép; finais 400.
-- Adversário: Adam como sempre; mesmas 2 réplicas por treino. 150 ép.
-- Seleção de configuração: NRMSE de VALIDAÇÃO médio de 2 seeds (a seleção
-  de 1 seed foi o que colapsou na Fila 13).
-- Espaços reduzidos e declarados: nós {(16,·),(24,·)} já com lr embutido no
-  recozimento -> {topo 16, topo 24}; adversário {gru h16, gru h32} × lr
-  {1e-3, 3e-3} (os vencedores da busca da Fila 13; lstm e h64 nunca
-  estiveram perto).
-- Finais: vencedor de cada lado, 5 seeds, TESTE intocado. Decisão a 1σ.
+Changes relative to Queue 13, all declared here:
+- Training (both sides): 2 replicas per measurement, chosen by the TRAINING
+  ERROR (never validation nor test) - the recipe that worked in Queue 12.
+- Our training: lr annealing 0.1→0.02 (0.99^ep). Selection 150 ep; finals 400.
+- Adversary: Adam as always; same 2 replicas per training run. 150 ep.
+- Configuration selection: mean VALIDATION NRMSE over 2 seeds (1-seed
+  selection is what collapsed in Queue 13).
+- Reduced and declared spaces: us {(16,·),(24,·)} with lr already built into
+  the annealing -> {top 16, top 24}; adversary {gru h16, gru h32} × lr
+  {1e-3, 3e-3} (the winners of Queue 13's search; lstm and h64 were never
+  close).
+- Finals: winner of each side, 5 seeds, TEST set untouched. Decision at 1σ.
 """
 import sys; sys.path.insert(0,"src"); sys.path.insert(0,"scripts")
 import numpy as np, torch, torch.nn as nn
@@ -103,7 +103,7 @@ def eval_adv(m, pairs):
     return float(np.mean(out))
 
 if __name__=="__main__":
-    print("EMENDA 2 — seleção (val médio de 2 seeds, receita anti-bacia nos dois lados)", flush=True)
+    print("EMENDA 2 - seleção (val médio de 2 seeds, receita anti-bacia nos dois lados)", flush=True)
     best_o=(9,None)
     for top in (16,24):
         vs=[eval_ours(train_ours(top, mix_sel, sd, 150), val_pairs) for sd in (0,1)]
@@ -116,7 +116,7 @@ if __name__=="__main__":
             v=float(np.mean(vs)); print(f"  adv h={h} lr={lr}: val={v:.3f} {vs}", flush=True)
             if v<best_a[0]: best_a=(v,(h,lr))
     print(f"vencedores: nós topo={best_o[1]} | adv {best_a[1]}\n", flush=True)
-    print("FINAIS — 5 seeds, teste intocado", flush=True)
+    print("FINAIS - 5 seeds, teste intocado", flush=True)
     ours=[eval_ours(train_ours(best_o[1], mix_full, sd, 400), test_pairs) for sd in range(5)]
     for sd,v in enumerate(ours): print(f"  nós seed={sd}: {v:.3f}", flush=True)
     h,lr=best_a[1]

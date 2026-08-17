@@ -1,28 +1,28 @@
-"""Precisão: quanto vale a pena acreditar em cada erro.
+"""Precision: how much each error deserves to be believed.
 
-Na formulação de energia livre (Friston), cada erro de previsão vem com uma
-precisão π — o inverso da variância esperada desse erro. A energia não é
-½‖ε‖², é ½π‖ε‖². Um nível cujo erro é habitualmente grande e imprevisível
-merece π baixo: as suas queixas contam menos.
+In the free-energy formulation (Friston), each prediction error comes with a
+precision π - the inverse of that error's expected variance. The energy is
+not ½‖ε‖², it is ½π‖ε‖². A level whose error is habitually large and
+unpredictable deserves a low π: its complaints count less.
 
-Friston identifica a modulação de precisão com a **atenção**, e o seu
-substrato com a neuromodulação (acetilcolina, noradrenalina) a ajustar o ganho
-pós-sináptico. Aqui é o mesmo objeto: um ganho por nível, aprendido
-localmente.
+Friston identifies precision modulation with **attention**, and its
+substrate with neuromodulation (acetylcholine, noradrenaline) adjusting the
+postsynaptic gain. Here it is the same object: a per-level gain, learned
+locally.
 
-Isto resolve também um problema concreto e nada teórico que a versão anterior
-tinha: o nível sensorial (64 unidades, sinal cru) e o topo (8 unidades,
-latente abstrato) têm erros de escalas completamente diferentes, e partilhavam
-um único limiar θ afinado à mão. Com precisão, o limiar passa a ser aplicado
-ao erro *normalizado* √π·ε — o mesmo θ quer dizer a mesma coisa em todo o
-lado.
+This also solves a concrete and not at all theoretical problem the previous
+version had: the sensory level (64 units, raw signal) and the top (8 units,
+abstract latent) have errors of completely different scales, and they shared
+a single threshold θ tuned by hand. With precision, the threshold is applied
+to the *normalized* error √π·ε - the same θ means the same thing
+everywhere.
 
-Regra de atualização, do gradiente da energia livre em ordem a log π:
+Update rule, from the gradient of the free energy with respect to log π:
 
     ∂F/∂logπ = ½(π·⟨ε²⟩ − 1)   ->   Δlogπ ∝ 1 − π·⟨ε²⟩
 
-cujo ponto fixo é π = 1/⟨ε²⟩. Local, uma linha, e sem divisões no caminho
-crítico se guardarmos log π.
+whose fixed point is π = 1/⟨ε²⟩. Local, one line, and no divisions on the
+critical path if we store log π.
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ from .dtypes import F
 
 
 class Precision:
-    """Ganho de um nível. Escalar por nível, ou um por unidade."""
+    """A level's gain. Scalar per level, or one per unit."""
 
     __slots__ = ("n", "per_unit", "log_pi", "lr", "lo", "hi")
 
@@ -59,19 +59,19 @@ class Precision:
 
     @property
     def scalar(self) -> float:
-        """Uma precisão representativa do nível (para o limite de estabilidade)."""
+        """A representative precision for the level (for the stability bound)."""
         return float(np.exp(self.log_pi).max())
 
     def weight(self, eps: np.ndarray) -> np.ndarray:
-        """π·ε — o erro tal como conta para a energia e para o estado."""
+        """π·ε - the error as it counts for the energy and for the state."""
         return (self.value * eps).astype(F, copy=False)
 
     def normalize(self, eps: np.ndarray) -> np.ndarray:
-        """√π·ε — o erro em unidades de desvio-padrão, para o limiar."""
+        """√π·ε - the error in standard-deviation units, for the threshold."""
         return (np.sqrt(self.value) * eps).astype(F, copy=False)
 
     def learn(self, eps: np.ndarray) -> None:
-        """Δlogπ ∝ 1 − π·ε². Ponto fixo em π = 1/⟨ε²⟩."""
+        """Δlogπ ∝ 1 − π·ε². Fixed point at π = 1/⟨ε²⟩."""
         if self.lr <= 0.0:
             return
         e2 = eps * eps
@@ -82,17 +82,17 @@ class Precision:
         np.clip(self.log_pi, np.log(self.lo), np.log(self.hi), out=self.log_pi)
 
     def rescale(self, log_offset: float) -> None:
-        """Desloca log π por uma constante comum a toda a rede.
+        """Shifts log π by a constant common to the whole network.
 
-        A escala *absoluta* das precisões não tem significado: multiplicar
-        todas por uma constante só reescala a energia, e o mínimo é o mesmo.
-        O que tem significado são os rácios entre níveis.
+        The *absolute* scale of the precisions has no meaning: multiplying
+        them all by a constant only rescales the energy, and the minimum is
+        the same. What has meaning is the ratios between levels.
 
-        Mas o assentamento é descida de gradiente com passo fixo, que não é
-        invariante à escala: π a subir infla o Hessiano, o passo adaptativo
-        encolhe para não divergir, e a inferência morre à fome. Foi
-        exatamente isto que aconteceu — π chegou a 10³ e o NRMSE a 1.0.
-        Ancorar a escala num nível de referência resolve, sem perder nada.
+        But settling is gradient descent with a fixed step, which is not
+        scale invariant: π rising inflates the Hessian, the adaptive step
+        shrinks to avoid diverging, and inference starves. That is exactly
+        what happened - π reached 10³ and the NRMSE 1.0. Anchoring the
+        scale to a reference level solves it, losing nothing.
         """
         self.log_pi -= F(log_offset)
         np.clip(self.log_pi, np.log(self.lo), np.log(self.hi), out=self.log_pi)
@@ -103,7 +103,7 @@ class Precision:
 
 
 class UnitPrecision:
-    """Precisão fixa a 1. O caso sem precisão, sem ramos no código."""
+    """Precision fixed at 1. The no-precision case, with no branches in the code."""
 
     __slots__ = ()
     value = F(1.0)

@@ -1,23 +1,24 @@
 #!/usr/bin/env python3
-"""PROFUNDIDADE POR EMPILHAMENTO DE TIJOLOS RASOS (regra de dois tempos).
+"""DEPTH BY STACKING SHALLOW BRICKS (two-stroke rule).
 
-O tijolo: rede rasa 64->24 com transicao portada no topo, treinada pela regra
-de dois tempos — o assentamento infere o estado, o credito tira-se do erro em
-malha aberta retroprojetado (h = W0^T e), com a cadeia exata pelo portao.
-Marco a reproduzir: 0.579 +- 0.004 (3 mundos, intercalado 16, 80 ep, lr 0.1).
+The brick: a shallow 64->24 network with a gated transition at the top,
+trained by the two-stroke rule - settling infers the state, credit is taken
+from the backprojected open-loop error (h = W0^T e), with the exact chain
+through the gate.
+Milestone to reproduce: 0.579 +- 0.004 (3 worlds, interleaved 16, 80 ep, lr 0.1).
 
-A pilha: modulo 2 vive por cima; o sensorial dele e o RESIDUO temporal do
-modulo 1 (r1 = s1_assentado - prior1_bruto) — o que a transicao do modulo 1
-nao conseguiu prever do proprio estado — e a previsao dele desce como
-correcao ADITIVA ao prior do modulo 1. Cada modulo so usa quantidades locais
-suas (o seu erro, o seu estado, a sua transposta). Nada de gradiente atraves
-de modulos: o modulo 1 trata a correcao como constante externa; o modulo 2
-trata r1 como dados.
+The stack: module 2 lives on top; its sensory input is module 1's temporal
+RESIDUAL (r1 = s1_settled - prior1_raw) - what module 1's transition
+could not predict from its own state - and its prediction descends as an
+ADDITIVE correction to module 1's prior. Each module only uses its own local
+quantities (its error, its state, its transpose). No gradient across
+modules: module 1 treats the correction as an external constant; module 2
+treats r1 as data.
 
-Variante alternativa (c): o sensorial do modulo 2 e o ESTADO COMPLETO s1 e a
-previsao dele desce na mesma como correcao aditiva ao prior — os dois
-preditores passam a disputar o mesmo alvo (a licao da via rapida diz que
-isto acaba mal; mede-se na mesma).
+Alternative variant (c): module 2's sensory input is the FULL STATE s1 and
+its prediction still descends as an additive correction to the prior - the
+two predictors end up contending for the same target (the fast-path lesson
+says this ends badly; it gets measured anyway).
 """
 from __future__ import annotations
 
@@ -60,11 +61,11 @@ def _sigm(x):
 def two_time_update(net: PCNetwork, target: np.ndarray, s_prev: np.ndarray,
                     prior_extra: np.ndarray | None = None,
                     lr: float = LR) -> np.ndarray:
-    """A regra de dois tempos sobre um tijolo. Devolve o prior bruto.
+    """The two-stroke rule on one brick. Returns the raw prior.
 
-    s_prev: estado do topo capturado ANTES de net.step (o assentamento so
-    infere). prior_extra: correcao aditiva vinda de cima — constante para
-    este modulo (nenhum gradiente a atravessa).
+    s_prev: top state captured BEFORE net.step (the settling only
+    infers). prior_extra: additive correction coming from above - constant
+    for this module (no gradient passes through it).
     """
     gt = net.gated
     W0 = net.layers[0].W
@@ -77,9 +78,9 @@ def two_time_update(net: PCNetwork, target: np.ndarray, s_prev: np.ndarray,
     h = W0.T.dot(e)
 
     W0 += (lr / (float(prior @ prior) + 1e-6)) * np.outer(e, prior).astype(F)
-    # canonico (validado contra o marco 0.579+-0.004): re-estimar sigma_max
-    # depois de mexer em W0, para o passo adaptativo do assentamento
-    # acompanhar o crescimento dos pesos. Sem isto: 0.569+-0.011.
+    # canonical (validated against the 0.579+-0.004 milestone): re-estimate
+    # sigma_max after touching W0, so the settling's adaptive step keeps up
+    # with the growth of the weights. Without this: 0.569+-0.011.
     net.layers[0].refresh_device()
     ns = float(s_prev @ s_prev) + 1e-6
     mod_g = (h * (c - s_prev) * g * (1.0 - g)).astype(F)
@@ -90,7 +91,7 @@ def two_time_update(net: PCNetwork, target: np.ndarray, s_prev: np.ndarray,
 
 
 # ---------------------------------------------------------------------------
-# (a) tijolo unico
+# (a) single brick
 # ---------------------------------------------------------------------------
 def run_brick(seed: int, epochs: int) -> tuple[float, dict]:
     net = PCNetwork(PCConfig(seed=seed, sizes=(64, 24), **BASE))
@@ -105,16 +106,16 @@ def run_brick(seed: int, epochs: int) -> tuple[float, dict]:
 
 
 # ---------------------------------------------------------------------------
-# (b)/(c) pilha de 2 tijolos
+# (b)/(c) stack of 2 bricks
 # ---------------------------------------------------------------------------
 class Stack2:
-    """Dois tijolos rasos, cada um treinado pela SUA regra de dois tempos.
+    """Two shallow bricks, each trained by ITS OWN two-stroke rule.
 
-    interface="residual": sensorial do modulo 2 = s1 - prior1_bruto.
-    interface="estado":   sensorial do modulo 2 = s1 (alvo disputado).
-    Em ambas, a previsao do modulo 2 desce como correcao aditiva ao prior
-    do modulo 1 (injetada no assentamento via _temporal_prior).
-    Implementa a interface de PCNetwork que evaluate_task usa.
+    interface="residual": module 2's sensory input = s1 - prior1_raw.
+    interface="estado":   module 2's sensory input = s1 (contested target).
+    In both, module 2's prediction descends as an additive correction to
+    module 1's prior (injected into the settling via _temporal_prior).
+    Implements the PCNetwork interface that evaluate_task uses.
     """
 
     def __init__(self, seed: int, interface: str, n2: int = 24):
@@ -122,7 +123,7 @@ class Stack2:
         self.net2 = PCNetwork(PCConfig(seed=seed + 50, sizes=(24, n2), **BASE))
         self.interface = interface
         self.corr = np.zeros(24, dtype=F)
-        # contadores: a norma da contribuicao do modulo 2 vs a do prior bruto
+        # counters: the norm of module 2's contribution vs that of the raw prior
         self.sum_corr = 0.0
         self.sum_prior = 0.0
         self.n_counted = 0
@@ -131,12 +132,12 @@ class Stack2:
 
         def patched(nself):
             p = orig(nself)
-            p += corr  # escreve em prior_top, in-place
+            p += corr  # writes into prior_top, in-place
             return p
 
         self.net1._temporal_prior = types.MethodType(patched, self.net1)
 
-    # -- interface para evaluate_task -----------------------------------
+    # -- interface for evaluate_task -------------------------------------
     def snapshot_state(self):
         return (self.net1.snapshot_state(), self.net2.snapshot_state(),
                 self.corr.copy())
@@ -152,8 +153,8 @@ class Stack2:
         self.corr.fill(0.0)
 
     def _set_corr(self):
-        # a previsao em malha aberta do modulo 2 = W1 @ prior2 (identidade,
-        # sem via rapida, sem memoria) — so quantidades do modulo 2.
+        # module 2's open-loop prediction = W1 @ prior2 (identity,
+        # no fast path, no memory) - only module 2 quantities.
         self.corr[:] = self.net2.predict_next()
 
     def _prior_raw(self, s1_prev):
@@ -173,7 +174,7 @@ class Stack2:
         self._set_corr()
         corr_now = self.corr.copy()
 
-        trace = self.net1.step(fr, learn=False)  # assentamento do modulo 1
+        trace = self.net1.step(fr, learn=False)  # module 1 settling
         s1 = self.net1.z[self.net1.L].copy()
 
         if learn:
@@ -184,7 +185,7 @@ class Stack2:
 
         target2 = (s1 - prior_raw) if self.interface == "residual" else s1
         target2 = target2.astype(F)
-        self.net2.step(target2, learn=False)  # assentamento do modulo 2
+        self.net2.step(target2, learn=False)  # module 2 settling
         if learn:
             two_time_update(self.net2, target2, s2_prev)
 

@@ -1,15 +1,15 @@
-"""A fronteira treino-Python / inferência-C.
+"""The Python-training / C-inference boundary.
 
-O Python treina; o C infere. Este módulo é o único sítio onde os dois se
-tocam, e escreve três coisas:
+Python trains; C infers. This module is the only place where the two touch,
+and it writes three things:
 
-  * `model.npz`  — pesos + config, para recarregar em Python.
-  * `model.h`    — os mesmos pesos como arrays estáticos C (sem malloc).
-  * `golden.h`   — tramas de entrada e as saídas que o Python produziu, para o
-                   C validar com asserts (passo 3 do plano).
+  * `model.npz`  - weights + config, to reload in Python.
+  * `model.h`    - the same weights as static C arrays (no malloc).
+  * `golden.h`   - input frames and the outputs Python produced, for the C
+                   to validate with asserts (step 3 of the plan).
 
-Enquanto os pesos forem float32 isto é só conveniência; quando forem
-ternários {-1,0,1} passa a ser o artefacto que vai para o crossbar.
+As long as the weights are float32 this is mere convenience; once they are
+ternary {-1,0,1} it becomes the artifact that goes to the crossbar.
 """
 
 from __future__ import annotations
@@ -50,10 +50,10 @@ def load_npz(path: str | Path) -> PCNetwork:
 # C
 # ---------------------------------------------------------------------------
 def _c_float(v: float) -> str:
-    """Literal float válido em C.
+    """A float literal valid in C.
 
-    `%.8g` de 0.0 dá "0", e "0f" é uma constante octal inválida — o header
-    deixa de compilar. Garante-se sempre um ponto ou um expoente.
+    `%.8g` of 0.0 gives "0", and "0f" is an invalid octal constant - the
+    header stops compiling. A dot or an exponent is always guaranteed.
     """
     v = float(v)
     if not np.isfinite(v):
@@ -65,7 +65,7 @@ def _c_float(v: float) -> str:
 
 
 def _c_rows(values: np.ndarray, indent: str) -> list[str]:
-    """Uma sequência de literais float, quebrada em linhas de ~76 colunas."""
+    """A sequence of float literals, broken into lines of ~76 columns."""
     lines: list[str] = []
     line = indent
     for v in values:
@@ -80,7 +80,7 @@ def _c_rows(values: np.ndarray, indent: str) -> list[str]:
 
 
 def _c_array(name: str, arr: np.ndarray) -> str:
-    """Array C estático. 2D leva chavetas aninhadas (senão o compilador avisa)."""
+    """Static C array. 2D gets nested braces (otherwise the compiler warns)."""
     arr = np.asarray(arr, dtype=F)
     if arr.ndim > 2:
         raise ValueError(f"{name}: só 1D e 2D (recebido {arr.ndim}D)")
@@ -101,20 +101,20 @@ def _c_array(name: str, arr: np.ndarray) -> str:
 
 
 def write_c_header(path: str | Path, net: PCNetwork) -> Path:
-    """Escreve os pesos e a config como header C auto-suficiente."""
+    """Writes the weights and the config as a self-contained C header."""
     cfg = net.cfg
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
 
     guard = path.name.upper().replace(".", "_").replace("-", "_")
     out = [
-        "/* Gerado por pcnet.export — não editar à mão. */",
+        "/* Gerado por pcnet.export - não editar à mão. */",
         f"#ifndef {guard}",
         f"#define {guard}",
         "",
         f"#define PC_N_LEVELS {cfg.n_levels}",
         f"#define PC_N_WEIGHTS {cfg.n_weights}",
-        # Maior nível: dá o tamanho dos arrays estáticos, sem malloc.
+        # Largest level: gives the size of the static arrays, no malloc.
         f"#define PC_MAX_SIZE {max(cfg.sizes)}",
         f"#define PC_MAX_ITERS {cfg.max_iters}",
         f"#define PC_Z_LR {_c_float(cfg.z_lr)}",
@@ -131,7 +131,7 @@ def write_c_header(path: str | Path, net: PCNetwork) -> Path:
         "",
         "/* Passo de assentamento por nível (1..L), já limitado pela",
         "   estabilidade: min(z_lr, safety·2/(1+σ_max²)). Vai resolvido daqui",
-        "   para que o C não tenha de estimar σ_max — os pesos são fixos no",
+        "   para que o C não tenha de estimar σ_max - os pesos são fixos no",
         "   destino, logo o limite também é. */",
         _c_array(
             "pc_z_lr_level",
@@ -152,11 +152,11 @@ def write_c_header(path: str | Path, net: PCNetwork) -> Path:
 def write_golden(
     path: str | Path, net: PCNetwork, frames: np.ndarray, n: int = 8
 ) -> Path:
-    """Vetores de referência: o C tem de reproduzir isto bit a bit (a menos de ε).
+    """Reference vectors: the C must reproduce this bit for bit (up to ε).
 
-    Corre `n` tramas *sem aprender* a partir de um estado zerado e guarda, por
-    trama, a previsão em malha aberta e o estado latente do topo depois do
-    assentamento — as duas quantidades que revelam qualquer divergência.
+    Runs `n` frames *without learning* from a zeroed state and stores, per
+    frame, the open-loop prediction and the top's latent state after
+    settling - the two quantities that reveal any divergence.
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -172,7 +172,7 @@ def write_golden(
 
     guard = path.name.upper().replace(".", "_").replace("-", "_")
     out = [
-        "/* Gerado por pcnet.export — vetores de referência do Python. */",
+        "/* Gerado por pcnet.export - vetores de referência do Python. */",
         f"#ifndef {guard}",
         f"#define {guard}",
         "",

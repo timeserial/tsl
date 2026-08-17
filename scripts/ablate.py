@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
-"""Ablações: cada ideia isolada, medida no mesmo sítio.
+"""Ablations: each idea in isolation, measured in the same place.
 
     .venv/bin/python scripts/ablate.py --toy
     .venv/bin/python scripts/ablate.py --data ETTm1.csv --column OT
     .venv/bin/python scripts/ablate.py --har "UCI HAR Dataset" --signal total_acc_x
 
-Uma ideia bonita que não se mede é uma opinião. Este script corre cada
-variante da arquitetura sobre o mesmo conjunto, com as mesmas seeds, e imprime
-duas colunas: quão bem prevê, e quantas conversões ADC custou. Uma ideia só
-entra por omissão se ganhar em pelo menos uma sem estragar a outra.
+A beautiful idea that is not measured is an opinion. This script runs each
+variant of the architecture on the same dataset, with the same seeds, and prints
+two columns: how well it predicts, and how many ADC conversions it cost. An idea
+only becomes a default if it wins on at least one without hurting the other.
 
-Reporta-se sempre a dispersão sobre seeds. Muitas das diferenças aqui são
-menores do que ela, e é preciso ver isso na tabela em vez de o descobrir mais
-tarde.
+The spread over seeds is always reported. Many of the differences here are
+smaller than it, and that has to be visible in the table instead of being
+discovered later.
 """
 
 from __future__ import annotations
@@ -53,7 +53,7 @@ def nrmse(pred, target) -> float:
 
 
 def measure(ds, cfg_kw, seeds, epochs, thetas=None):
-    """Treina por seed; varre θ só na inferência (θ é um botão de inferência)."""
+    """Trains per seed; sweeps θ only at inference (θ is an inference knob)."""
     thetas = thetas or (PCConfig().theta,)
     per_theta = {th: [] for th in thetas}
     n_params = 0
@@ -120,10 +120,10 @@ def main() -> int:
     seeds = tuple(range(args.seeds))
     thetas = tuple(args.thetas) if args.thetas else (PCConfig().theta,)
     print(ds.describe())
-    print(f"{args.seeds} seeds, {args.epochs} passagens, θ = "
+    print(f"{args.seeds} seeds, {args.epochs} passes, θ = "
           f"{', '.join(str(t) for t in thetas)}")
 
-    rule("Cada ideia isolada")
+    rule("Each idea in isolation")
     rows, results = [], {}
     for name, kw in VARIANTS.items():
         per_theta, n_params = measure(ds, kw, seeds, args.epochs, thetas)
@@ -141,8 +141,8 @@ def main() -> int:
         print(f"  … {name}")
     print()
     table(rows, ["variante", "θ", "NRMSE", "ADC/trama", "iters", "parâmetros"])
-    print("\n  Uma ideia só merece ficar ligada por omissão se ganhar numa coluna")
-    print("  sem estragar a outra, e por uma margem maior do que a dispersão.")
+    print("\n  An idea only deserves to stay on by default if it wins in one column")
+    print("  without hurting the other, and by a margin larger than the spread.")
 
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)

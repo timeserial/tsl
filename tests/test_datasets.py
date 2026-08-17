@@ -1,4 +1,4 @@
-"""Carregar problemas reais sem enganar a métrica."""
+"""Loading real problems without cheating the metric."""
 
 import wave
 
@@ -24,11 +24,11 @@ def tone(n, freq=0.02, amp=1.0):
 
 # --------------------------------------------------------------------------
 def test_normalization_uses_only_the_training_split():
-    """A fuga mais fácil de cometer: normalizar com estatísticas do futuro.
+    """The easiest leak to commit: normalizing with statistics from the future.
 
-    Dá-se um sinal cuja segunda metade tem escala completamente diferente. Se
-    a normalização visse o conjunto todo, o treino sairia com desvio-padrão
-    diferente de 1.
+    We feed a signal whose second half has a completely different scale. If
+    the normalization saw the whole set, the training split would come out
+    with a standard deviation different from 1.
     """
     from pcnet.datasets import _split_and_normalize
 
@@ -39,7 +39,7 @@ def test_normalization_uses_only_the_training_split():
 
 
 def test_a_silent_test_split_is_refused(tmp_path):
-    """Se o teste for silêncio, "repetir a anterior" ganha e a tabela mente."""
+    """If the test split is silence, "repeat the previous one" wins and the table lies."""
     x = np.concatenate([tone(8000), np.zeros(2000)])
     path = write_wav(tmp_path / "decai.wav", x)
     with pytest.raises(ValueError, match="não tem energia"):

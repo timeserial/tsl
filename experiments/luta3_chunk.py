@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""LUTA 3 — executor em fatias (os processos longos morrem nesta máquina).
+"""FIGHT 3 - sliced runner (long processes die on this machine).
 
-Mesmo protocolo pré-registado (87c4bab), mesma retoma (6c1ed5b); cada
-invocação faz um punhado de seeds e sai, appendando ao ficheiro de
-resultados. --verdict lê o ficheiro completo e aplica a regra declarada.
+Same pre-registered protocol (87c4bab), same resume (6c1ed5b); each
+invocation does a handful of seeds and exits, appending to the results
+file. --verdict reads the complete file and applies the declared rule.
 
   python -u experiments/luta3_chunk.py ours 11 12 13
   python -u experiments/luta3_chunk.py adv 0 1 ... 19
   python -u experiments/luta3_chunk.py esn 0 1 ... 19
-  python -u experiments/luta3_chunk.py det        # persistência + NLMS
+  python -u experiments/luta3_chunk.py det        # persistence + NLMS
   python -u experiments/luta3_chunk.py verdict
 """
 import sys, re
@@ -45,7 +45,7 @@ if __name__ == "__main__":
             for ln in buf.getvalue().strip().splitlines():
                 log(ln)
         log(f"  NÓS vs NLMS-AR ({nlms:.4f}) e persistência ({pers:.4f}): "
-            f"determinísticos — comparar com a média e o IC de NÓS.")
+            f"determinísticos - comparar com a média e o IC de NÓS.")
         sys.exit(0)
 
     from luta3_dados_virgens import (train_ours, eval_ours, train_adv,

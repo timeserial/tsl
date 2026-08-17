@@ -1,15 +1,15 @@
-/* A célula de dois tempos em C99 puro.
+/* The two-stroke cell in pure C99.
  *
- * O teste honesto do plano: se não couber em C simples — arrays estáticos,
- * zero malloc, zero dependências — não cabe no crossbar. Cabe:
- *   - previsão:       1 matvec + 2 matvecs pequenos + 2 LUTs
- *   - crédito local:  1 matvec transposto + 3 produtos exteriores
- *   - memória total:  ~11 KB em float32 (N_IN=64, N_TOP=24)
+ * The plan's honest test: if it does not fit in simple C - static arrays,
+ * zero malloc, zero dependencies - it does not fit in the crossbar. It fits:
+ *   - prediction:     1 matvec + 2 small matvecs + 2 LUTs
+ *   - local credit:   1 transposed matvec + 3 outer products
+ *   - total memory:   ~11 KB in float32 (N_IN=64, N_TOP=24)
  *
- * Compila igual no Mac e no ESP32:  cc -std=c99 -O2 twostroke.c -lm
- * Valida contra vetores dourados do Python (contrato em c/README.md):
- *   1) uma atualização isolada: exata a 1e-5;
- *   2) trajetória de 300 janelas: MSE agregado dentro de 2%.
+ * Compiles the same on the Mac and on the ESP32:  cc -std=c99 -O2 twostroke.c -lm
+ * Validates against golden vectors from the Python (contract in c/README.md):
+ *   1) one isolated update: exact to 1e-5;
+ *   2) a 300-window trajectory: aggregate MSE within 2%.
  */
 #include <math.h>
 #include <stdio.h>
@@ -18,7 +18,7 @@
 static float W0[N_IN*N_TOP], A[N_TOP*N_TOP], G[N_TOP*N_TOP], b[N_TOP];
 static float s[N_TOP];
 
-/* ---- primitivas: as três operações do substrato ---------------------- */
+/* ---- primitives: the three operations of the substrate --------------- */
 static void matvec(const float *M, const float *v, float *out, int r, int c){
     int i,j; for(i=0;i<r;i++){ float a=0; for(j=0;j<c;j++) a+=M[i*c+j]*v[j]; out[i]=a; }
 }
@@ -32,7 +32,7 @@ static float dot(const float *a, const float *bb, int n){
     int i; float x=0; for(i=0;i<n;i++) x+=a[i]*bb[i]; return x;
 }
 
-/* ---- um passo: prever, creditar (fase 1), transitar ------------------- */
+/* ---- one step: predict, assign credit (phase 1), transition ----------- */
 static float step_learn(const float *x, float lr){
     float c_[N_TOP], g_[N_TOP], prior[N_TOP], pred[N_IN], e[N_IN], h[N_TOP];
     float mc[N_TOP], mg[N_TOP];
@@ -46,16 +46,16 @@ static float step_learn(const float *x, float lr){
     for(i=0;i<N_IN;i++){ e[i]=x[i]-pred[i]; mse+=e[i]*e[i]; }
     mse/=N_IN;
     if(lr>0){
-        matvec_T(W0, e, h, N_IN, N_TOP);            /* leitura transposta   */
+        matvec_T(W0, e, h, N_IN, N_TOP);            /* transposed read      */
         ns=dot(s,s,N_TOP)+1e-6f; npr=dot(prior,prior,N_TOP)+1e-6f;
-        rank1(W0, e, prior, lr/npr, N_IN, N_TOP);   /* escritas rank-1      */
+        rank1(W0, e, prior, lr/npr, N_IN, N_TOP);   /* rank-1 writes        */
         for(i=0;i<N_TOP;i++) mc[i]=h[i]*g_[i]*(1.0f-c_[i]*c_[i]);
         rank1(A, mc, s, lr/ns, N_TOP, N_TOP);
         for(i=0;i<N_TOP;i++) mg[i]=h[i]*(c_[i]-s[i])*g_[i]*(1.0f-g_[i]);
         rank1(G, mg, s, lr/ns, N_TOP, N_TOP);
         for(i=0;i<N_TOP;i++) b[i]+=lr*mg[i];
     }
-    /* correção sensorial de um passo (quebra o ponto fixo do zero) */
+    /* one-step sensory correction (breaks the fixed point at zero) */
     if(lr<=0) matvec_T(W0, e, h, N_IN, N_TOP);
     for(i=0;i<N_TOP;i++){ float v=prior[i]+0.2f*h[i];
         if(v>2) v=2; if(v<-2) v=-2; s[i]=v; }
@@ -69,7 +69,7 @@ static float maxdiff(const float *a, const float *bb, int n){
 
 int main(void){
     int k; float m, mse_tr=0, mse_ev=0;
-    /* --- contrato 1: uma atualização isolada, exata --------------------- */
+    /* --- contract 1: one isolated update, exact -------------------------- */
     load(W0,g_W0_init,N_IN*N_TOP); load(A,g_A_init,N_TOP*N_TOP);
     load(G,g_G_init,N_TOP*N_TOP);  load(b,g_b_init,N_TOP);
     load(s,g_s_fix,N_TOP);
@@ -81,7 +81,7 @@ int main(void){
     printf("contrato 1 (exatidao 1 passo): maxdiff=%.3g  %s\n",
            (double)m, m<1e-5f?"OK":"FALHOU");
     if(m>=1e-5f) return 1;
-    /* --- contrato 2: trajetória agregada -------------------------------- */
+    /* --- contract 2: aggregate trajectory --------------------------------- */
     load(W0,g_W0_init,N_IN*N_TOP); load(A,g_A_init,N_TOP*N_TOP);
     load(G,g_G_init,N_TOP*N_TOP);  load(b,g_b_init,N_TOP);
     for(k=0;k<N_TOP;k++) s[k]=0;
@@ -97,6 +97,6 @@ int main(void){
            100.0*fabs(mse_ev-G_MSE_EVAL)/G_MSE_EVAL);
     if(fabs(mse_tr-G_MSE_TRAIN)/G_MSE_TRAIN>0.02) return 2;
     if(fabs(mse_ev-G_MSE_EVAL)/G_MSE_EVAL>0.02) return 3;
-    printf("TUDO OK — a celula de dois tempos cabe em C simples.\n");
+    printf("TUDO OK - a celula de dois tempos cabe em C simples.\n");
     return 0;
 }

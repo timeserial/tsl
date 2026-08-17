@@ -1,4 +1,4 @@
-"""Precisão: o ganho com que cada erro conta."""
+"""Precision: the gain with which each error counts."""
 
 import numpy as np
 import pytest
@@ -8,7 +8,7 @@ from pcnet.precision import Precision, UnitPrecision
 
 
 def test_precision_converges_to_the_inverse_variance():
-    """π → 1/⟨ε²⟩. É o ponto fixo da regra e é o que a torna interpretável."""
+    """π → 1/⟨ε²⟩. It is the fixed point of the rule and what makes it interpretable."""
     rng = np.random.default_rng(0)
     sigma = 0.25
     p = Precision(16, lr=0.05)
@@ -55,10 +55,10 @@ def test_rescale_only_shifts_and_keeps_ratios():
 def test_precision_is_clipped_at_both_ends():
     p = Precision(4, lr=1.0, lo=0.5, hi=2.0)
     for _ in range(200):
-        p.learn(np.zeros(4, dtype=F))  # erro nulo empurra π para cima
+        p.learn(np.zeros(4, dtype=F))  # zero error pushes π up
     assert p.scalar <= 2.0 + 1e-6
     for _ in range(200):
-        p.learn(np.full(4, 100.0, dtype=F))  # erro enorme empurra para baixo
+        p.learn(np.full(4, 100.0, dtype=F))  # huge error pushes it down
     assert p.scalar >= 0.5 - 1e-6
 
 

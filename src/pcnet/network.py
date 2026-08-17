@@ -1,20 +1,20 @@
-"""A hierarquia preditiva esparsa.
+"""The sparse predictive hierarchy.
 
-Um passo de tempo (uma trama do sensor) corre assim:
+One time step (one sensor frame) runs like this:
 
-  1. A previsão desce. O topo propaga-se no tempo (ẑ_L = tanh(A·z_L(t-1)))
-     e daí desce nível a nível até gerar uma trama esperada ẑ_0. Isto
-     acontece *antes* de ver os dados: ε_0 na primeira avaliação é o erro de
-     previsão em malha aberta.
-  2. A surpresa sobe. Compara-se, aplica-se o limiar (|ε| < θ não é
-     transmitido — silêncio é custo zero) e o que sobra corrige os estados de
-     cima. Repete-se até a surpresa total convergir: *early exit* para
-     entradas banais, mais iterações para as difíceis. O compute é
-     proporcional à surpresa, não à capacidade da rede.
-  3. Aprende-se localmente. ΔW ∝ ε ⊗ z: só quantidades presentes na sinapse.
-     Sem backprop, sem grafo, sem ativações guardadas.
+  1. The prediction descends. The top propagates itself in time (ẑ_L = tanh(A·z_L(t-1)))
+     and from there it descends level by level until it generates an expected
+     frame ẑ_0. This happens *before* seeing the data: ε_0 on the first
+     evaluation is the open-loop prediction error.
+  2. The surprise rises. Compare, apply the threshold (|ε| < θ is not
+     transmitted, silence is zero cost) and what remains corrects the states
+     above. Repeat until the total surprise converges: *early exit* for
+     trivial inputs, more iterations for the hard ones. Compute is
+     proportional to surprise, not to the network's capacity.
+  3. Learning is local. ΔW ∝ ε ⊗ z: only quantities present at the synapse.
+     No backprop, no graph, no stored activations.
 
-O estado latente do topo persiste entre tramas — é a memória de trabalho.
+The top's latent state persists across frames - it is the working memory.
 """
 
 from __future__ import annotations
@@ -40,9 +40,9 @@ class PCNetwork:
         rng = np.random.default_rng(self.cfg.seed)
 
         sizes = self.cfg.sizes
-        self.L = len(sizes) - 1  # índice do nível de topo
+        self.L = len(sizes) - 1  # index of the top level
 
-        # layers[l] gera o nível l a partir do nível l+1.
+        # layers[l] generates level l from level l+1.
         self.layers: list[PCLayer] = []
         for l in range(self.L):
             act = self.cfg.sensory_activation if l == 0 else self.cfg.latent_activation
@@ -51,7 +51,7 @@ class PCNetwork:
                         gated=self.cfg.gated_layers)
             )
 
-        # Transição temporal do topo: uma recorrência linear + tanh.
+        # Temporal transition of the top: a linear recurrence + tanh.
         n_top = sizes[-1]
         self.A = (
             np.eye(n_top, dtype=F)
@@ -60,8 +60,8 @@ class PCNetwork:
             else np.eye(n_top, dtype=F)
         )
         self._f_top, self._fprime_top = activations.get(self.cfg.latent_activation)
-        # Mistura de dinâmicas no topo. Com n_dynamics=1 fica exatamente a
-        # matriz única de antes e nada muda.
+        # Mixture of dynamics at the top. With n_dynamics=1 it is exactly the
+        # single matrix from before and nothing changes.
         self.mixture = (
             TopMixture(n_top, self.cfg.n_dynamics, rng, self.cfg.dynamics_tau)
             if self.cfg.n_dynamics > 1
@@ -73,18 +73,18 @@ class PCNetwork:
             if self.cfg.gated_transition else None
         )
 
-        # Estados, pré-alocados (espelham os arrays estáticos do C).
+        # States, preallocated (mirroring the C static arrays).
         self.z: list[np.ndarray] = [np.zeros(n, dtype=F) for n in sizes]
         self.prior_top = np.zeros(n_top, dtype=F)
         self.a_top = np.zeros(n_top, dtype=F)
-        # O estado de cada nível na trama anterior. Só os latentes precisam:
-        # o nível sensorial é fixado pelos dados e não se prevê a si próprio.
+        # The state of each level at the previous frame. Only the latents need
+        # it: the sensory level is clamped by the data and does not predict itself.
         self._z_prev: list[np.ndarray] = [np.zeros(n, dtype=F) for n in sizes]
 
-        # Escalas de tempo: um modelo temporal por nível latente, cada vez mais
-        # lento à medida que se sobe (ver temporal.py). O topo continua a usar
-        # `A`, que já é denso e já sabe viver num crossbar.
-        # λ decresce com a altura: o topo integra sobre a janela mais longa.
+        # Timescales: one temporal model per latent level, ever slower as one
+        # goes up (see temporal.py). The top keeps using `A`, which is already
+        # dense and already knows how to live on a crossbar.
+        # λ decreases with height: the top integrates over the longest window.
         lams = timescales(self.L, self.cfg.timescale_base, self.cfg.timescale_ratio)
         self._top_lam = (
             lams[self.L - 1] if self.cfg.level_transition != "none" else 1.0
@@ -101,9 +101,10 @@ class PCNetwork:
                 )
         self.lams = lams
 
-        # Precisão: o ganho com que o erro de cada canal conta (ver precision.py).
-        # Dois canais por nível latente — o que vem de cima e o que vem do
-        # próprio passado — porque são erros de naturezas diferentes.
+        # Precision: the gain with which each channel's error counts (see
+        # precision.py). Two channels per latent level, the one coming from
+        # above and the one from its own past, because they are errors of
+        # different natures.
         def _prec(n: int):
             if not self.cfg.use_precision:
                 return UnitPrecision()
@@ -112,8 +113,9 @@ class PCNetwork:
         self.prec_hier = [_prec(sizes[l]) for l in range(self.L)]
         self.prec_temp = [None] + [_prec(sizes[l]) for l in range(1, self.L + 1)]
 
-        # Via rápida: prevê a trama seguinte diretamente da anterior. Linear e
-        # sem não-linearidade nenhuma — é a via "grosseira mas imediata".
+        # Fast path: predicts the next frame directly from the previous one.
+        # Linear and with no nonlinearity at all - it is the "coarse but
+        # immediate" path.
         n0 = sizes[0]
         self.A0 = (
             (rng.standard_normal((n0, n0)) * (0.1 / np.sqrt(n0))).astype(F)
@@ -122,44 +124,46 @@ class PCNetwork:
         )
         self._fast = np.zeros(n0, dtype=F)
 
-        # Memória episódica: desligada até `attach_memory`. A chave é o estado
-        # do topo (o resumo do contexto), o valor é o erro que a hierarquia
-        # cometeu — a memória corrige o resíduo, não compete com os pesos.
+        # Episodic memory: off until `attach_memory`. The key is the state of
+        # the top (the summary of the context), the value is the error the
+        # hierarchy made - the memory corrects the residual, it does not
+        # compete with the weights.
         self.memory: EpisodicMemory | None = None
         self._recall = np.zeros(n0, dtype=F)
         self._recall_conf = 0.0
         self._replay_rng = np.random.default_rng(self.cfg.seed + 31337)
 
-        # Diagnóstico: fixar dimensões do estado de topo a um valor dado, para
-        # perguntar "e se a rede *soubesse* em que mundo está?". Sem isto, um
-        # indicador posto na entrada é 3 dimensões em 67 e quase não empurra o
-        # latente — o oráculo sai fraco e a conclusão sai errada.
+        # Diagnostic: clamp dimensions of the top state to a given value, to
+        # ask "what if the network *knew* which world it is in?". Without
+        # this, an indicator placed at the input is 3 dimensions out of 67 and
+        # barely pushes the latent - the oracle comes out weak and the
+        # conclusion comes out wrong.
         self.top_clamp: np.ndarray | None = None
 
-        # Crítico de 1 bit: instantâneo dos pesos antes da última
-        # aprendizagem, e média móvel da surpresa para o veto.
+        # 1-bit critic: snapshot of the weights before the last learning
+        # step, and moving average of the surprise for the veto.
         self._critic_snapshot = None
         self._critic_ema = 0.0
 
-        # Constantes de contabilidade.
+        # Accounting constants.
         self.macs_down_per_pass = sum(lay.macs_down() for lay in self.layers)
-        self.eps_per_pass = sum(sizes)  # um ε por unidade, topo incluído
+        self.eps_per_pass = sum(sizes)  # one ε per unit, top included
 
-        # Substrato: None = float32 ideal.
+        # Substrate: None = ideal float32.
         self.device_model: DeviceModel | None = None
         self._A_device = None
         self.A_eff = self.A
 
     # ------------------------------------------------------------------
-    # estado
+    # state
     # ------------------------------------------------------------------
     @property
     def _z_top_prev(self) -> np.ndarray:
-        """O estado do topo na trama anterior."""
+        """The state of the top at the previous frame."""
         return self._z_prev[self.L]
 
     def reset(self) -> None:
-        """Zera os estados latentes. Os pesos ficam."""
+        """Zeroes the latent states. The weights stay."""
         for z in self.z:
             z.fill(0.0)
         for z in self._z_prev:
@@ -167,11 +171,12 @@ class PCNetwork:
         self.prior_top.fill(0.0)
 
     def snapshot_state(self) -> tuple[list[np.ndarray], list[np.ndarray]]:
-        """Guarda o estado dinâmico (não os pesos).
+        """Saves the dynamic state (not the weights).
 
-        A rede é online e o estado atravessa o tempo, logo *avaliar* mexe no
-        estado. Sem isto, medir o modelo a meio do treino altera o treino —
-        e a curva de aprendizagem passa a medir a régua.
+        The network is online and the state crosses time, so *evaluating*
+        touches the state. Without this, measuring the model mid-training
+        alters the training - and the learning curve ends up measuring the
+        ruler.
         """
         return ([z.copy() for z in self.z], [z.copy() for z in self._z_prev])
 
@@ -183,15 +188,15 @@ class PCNetwork:
             dst[:] = src
 
     # ------------------------------------------------------------------
-    # substrato
+    # substrate
     # ------------------------------------------------------------------
     def attach_device(self, model: DeviceModel) -> None:
-        """Programa os pesos num crossbar concreto (com os defeitos dele).
+        """Programs the weights onto a concrete crossbar (with its defects).
 
-        Os desvios são amostrados uma vez, aqui — reprogramar com os mesmos
-        parâmetros e a mesma seed dá o *mesmo* dispositivo. Um crossbar
-        diferente é outra seed, e é por isso que qualquer medição de
-        tolerância tem de ser feita sobre vários.
+        The deviations are sampled once, here - reprogramming with the same
+        parameters and the same seed gives the *same* device. A different
+        crossbar is another seed, and that is why any tolerance measurement
+        has to be done over several of them.
         """
         self.device_model = model
         for l, lay in enumerate(self.layers):
@@ -215,10 +220,10 @@ class PCNetwork:
             self.A_eff = self._A_device.program(self.A)
 
     # ------------------------------------------------------------------
-    # o caminho descendente
+    # the descending path
     # ------------------------------------------------------------------
     def _temporal_prior(self) -> np.ndarray:
-        """ẑ_L(t) = f(A · z_L(t-1)): o que o topo espera de si próprio."""
+        """ẑ_L(t) = f(A · z_L(t-1)): what the top expects of itself."""
         if not self.cfg.use_transition:
             self.a_top[:] = self._z_top_prev
             self.prior_top[:] = self._z_top_prev
@@ -227,8 +232,9 @@ class PCNetwork:
         if self.cfg.state_leak:
             z_prev = (F(1.0 - self.cfg.state_leak) * z_prev).astype(F, copy=False)
         if self.gated is not None:
-            # A mistura (1-g)z + g·tanh(Az) já inclui a não-linearidade e a
-            # retenção: devolve-se o prior diretamente, sem tanh nem λ extra.
+            # The mixture (1-g)z + g·tanh(Az) already includes the
+            # nonlinearity and the retention: the prior is returned directly,
+            # with no extra tanh or λ.
             u = self._z_prev[0] if self.cfg.thalamic else None
             self.prior_top[:] = self.gated.predict(z_prev, u)
             self.a_top[:] = self.prior_top
@@ -239,9 +245,10 @@ class PCNetwork:
             np.dot(self.A_eff, z_prev, out=self.a_top)
         if self._A_device is not None:
             self.a_top[:] = self._A_device.read(self.a_top)
-        # A escala de tempo do topo. Sem isto o topo é um A denso sem retenção
-        # nenhuma — ou seja, o nível *mais rápido* da rede, exatamente ao
-        # contrário do que uma hierarquia de janelas temporais pede.
+        # The top's timescale. Without this the top is a dense A with no
+        # retention at all - that is, the *fastest* level of the network,
+        # exactly the opposite of what a hierarchy of temporal windows asks
+        # for.
         if self._top_lam < 1.0:
             self.a_top *= F(self._top_lam)
             self.a_top += F(1.0 - self._top_lam) * z_prev
@@ -249,13 +256,14 @@ class PCNetwork:
         return self.prior_top
 
     def _combine_priors(self, level: int, from_above: np.ndarray) -> np.ndarray:
-        """Junta o que o nível de cima prevê com o que o próprio passado prevê.
+        """Combines what the level above predicts with what one's own past predicts.
 
-        Duas fontes de informação independentes sobre a mesma quantidade, cada
-        uma com a sua precisão: a média ponderada pelas precisões é a resposta
-        Bayesiana, e é também o mínimo da energia se mais nada puxasse o
-        estado. Sem transição no nível, sobra só a previsão de cima — que é
-        exatamente o comportamento do passo 1.
+        Two independent sources of information about the same quantity, each
+        with its own precision: the precision-weighted average is the Bayesian
+        answer, and it is also the minimum of the energy if nothing else
+        pulled the state. Without a transition at the level, only the
+        prediction from above remains - which is exactly the behavior of
+        step 1.
         """
         trans = self.transitions[level]
         if trans is None:
@@ -266,11 +274,11 @@ class PCNetwork:
         return ((ph * from_above + pt * from_past) / (ph + pt)).astype(F, copy=False)
 
     def predict_next(self) -> np.ndarray:
-        """A trama que a rede espera ver a seguir, sem olhar para os dados.
+        """The frame the network expects to see next, without looking at the data.
 
-        Previsão em malha aberta, útil para avaliar e para comparar contra o
-        inferidor em C. Não altera z nem o estado que atravessa tramas (só
-        mexe em buffers de rascunho, que o passo seguinte reescreve).
+        Open-loop prediction, useful for evaluating and for comparing against
+        the C inferrer. Does not alter z or the state that crosses frames
+        (it only touches scratch buffers, which the next step rewrites).
         """
         z = self._temporal_prior().copy()
         for l in range(self.L - 1, 0, -1):
@@ -284,17 +292,17 @@ class PCNetwork:
         return out
 
     def _fast_prediction(self) -> np.ndarray:
-        """A via rápida: A_0 · (trama anterior). Zero se estiver desligada."""
+        """The fast path: A_0 · (previous frame). Zero if it is off."""
         if self.A0 is None:
             return F(0.0)
         np.dot(self.A0, self._z_prev[0], out=self._fast)
         return self._fast
 
     # ------------------------------------------------------------------
-    # memória episódica
+    # episodic memory
     # ------------------------------------------------------------------
     def attach_memory(self, cfg: EpisodicConfig | None = None) -> EpisodicMemory:
-        """Liga um armazém episódico de tamanho fixo (ver episodic.py)."""
+        """Attaches a fixed-size episodic store (see episodic.py)."""
         self.memory = EpisodicMemory(
             key_dim=self.cfg.sizes[-1], value_dim=self.cfg.sizes[0], cfg=cfg
         )
@@ -306,10 +314,10 @@ class PCNetwork:
         self._recall_conf = 0.0
 
     def _memory_recall(self) -> np.ndarray:
-        """O que a memória diz que vai falhar, a partir do contexto atual.
+        """What the memory says will go wrong, from the current context.
 
-        Endereçada pelo estado do topo da trama anterior — é esse o resumo do
-        contexto que a rede tem antes de ver os dados novos.
+        Addressed by the top state of the previous frame - that is the
+        summary of the context the network has before seeing the new data.
         """
         self._recall.fill(0.0)
         self._recall_conf = 0.0
@@ -324,26 +332,26 @@ class PCNetwork:
     def dream(self, n_dreams: int = 16, noise: float = 0.15,
               anti: bool = False, anti_scale: float = 0.1,
               seed_states: np.ndarray | None = None) -> int:
-        """REM: o córtex gera os seus próprios padrões e treina sobre eles.
+        """REM: the cortex generates its own patterns and trains on them.
 
-        Semeia o topo com um contexto guardado (mais ruído) ou com ruído puro,
-        desce pelo modelo generativo para *sonhar* uma trama, e aprende sobre
-        ela. Parece circular — treinar no que o próprio modelo gera — e é
-        exatamente essa a função: ancorar o mapeamento que já existe, para que
-        a aprendizagem nova o deforme menos. É o pseudorehearsal de Robins
-        (1995), que o sono REM já fazia primeiro: ensaiar o conhecimento
-        antigo sem guardar os dados antigos.
+        Seeds the top with a stored context (plus noise) or with pure noise,
+        descends through the generative model to *dream* a frame, and learns
+        on it. It seems circular - training on what the model itself
+        generates - and that is exactly the point: anchor the mapping that
+        already exists, so that new learning deforms it less. It is Robins'
+        (1995) pseudorehearsal, which REM sleep was already doing first:
+        rehearsing old knowledge without storing the old data.
         """
         snapshot = self.snapshot_state()
         dreamed = 0
-        # Pesadelos (Crick & Mitchison 1983, "sonhamos para esquecer";
-        # Hopfield 1983, unlearning): o que a rede gera espontaneamente e não
-        # corresponde a nada real — as misturas espúrias, o compromisso entre
-        # mundos — recebe plasticidade NEGATIVA e pequena. A assimetria que
-        # protege o conhecimento verdadeiro é automática: o real é reforçado
-        # acordado todos os dias; o espúrio só existe em sonhos, e em sonhos
-        # apanha. O nosso sonho anterior falhou por ter o sinal ao contrário —
-        # treinar PARA o que se gera ancora a mediocridade.
+        # Nightmares (Crick & Mitchison 1983, "we dream in order to forget";
+        # Hopfield 1983, unlearning): what the network generates spontaneously
+        # and corresponds to nothing real - the spurious mixtures, the
+        # compromise between worlds - receives NEGATIVE and small plasticity.
+        # The asymmetry that protects true knowledge is automatic: the real is
+        # reinforced awake every day; the spurious only exists in dreams, and
+        # in dreams it gets hit. Our earlier dream failed for having the sign
+        # backwards - training TOWARD what is generated anchors mediocrity.
         from dataclasses import replace as _replace
         original = self.cfg
         if anti:
@@ -354,9 +362,9 @@ class PCNetwork:
         try:
             for k in range(n_dreams):
                 if seed_states is not None:
-                    # Pesadelos dirigidos: o chamador escolhe os contextos a
-                    # visitar — tipicamente misturas de estados reais, que é
-                    # onde vive o compromisso espúrio.
+                    # Directed nightmares: the caller chooses the contexts to
+                    # visit - typically mixtures of real states, which is
+                    # where the spurious compromise lives.
                     z = seed_states[k % len(seed_states)].astype(F).copy()
                 elif self.memory is not None and self.memory.n_occupied:
                     slot = self.memory.replay(1, self._replay_rng)
@@ -365,13 +373,13 @@ class PCNetwork:
                     z = np.zeros(self.cfg.sizes[-1], dtype=F)
                 z += F(noise) * self._replay_rng.standard_normal(z.size).astype(F)
 
-                # sonhar: descer o modelo generativo a partir desse contexto
+                # dream: descend the generative model from that context
                 self._z_prev[self.L][:] = z
                 zz = self._f_top(self.A_eff.dot(z)).astype(F, copy=False)
                 for l in range(self.L - 1, 0, -1):
                     zz = self.layers[l].predict(zz).copy()
                 frame = self.layers[0].predict(zz).copy()
-                self._z_prev[0][:] = frame  # o sonho é o seu próprio contexto
+                self._z_prev[0][:] = frame  # the dream is its own context
 
                 self.step(frame, learn=True, use_memory=False)
                 dreamed += 1
@@ -381,9 +389,9 @@ class PCNetwork:
         return dreamed
 
     def downscale(self, factor: float = 0.01) -> None:
-        """Renormalização sináptica (Tononi & Cirelli): o sono encolhe todas
-        as sinapses multiplicativamente, preservando os rácios. A vigília
-        potencia; o sono repõe o orçamento."""
+        """Synaptic renormalization (Tononi & Cirelli): sleep shrinks all
+        synapses multiplicatively, preserving the ratios. Wakefulness
+        potentiates; sleep restores the budget."""
         f = F(1.0 - factor)
         for lay in self.layers:
             lay.W *= f
@@ -395,15 +403,16 @@ class PCNetwork:
 
     def sleep(self, cycles: int = 3, sws: int = 16, rem: int = 8,
               downscale: float = 0.0, lr_scale: float = 0.1) -> dict:
-        """Uma noite: alternância SWS (replay episódico) / REM (sonho).
+        """One night: alternating SWS (episodic replay) / REM (dreaming).
 
-        A ordem importa e é a fisiológica — primeiro o episódico entra
-        (hipocampo -> córtex), depois o sonho re-ancora o conjunto.
+        The order matters and it is the physiological one - first the
+        episodic goes in (hippocampus -> cortex), then the dream re-anchors
+        the whole.
         """
-        # A plasticidade do sono não é a da vigília: a acetilcolina muda de
-        # nível e o replay atua com ganho reduzido. Sonhar à taxa plena
-        # arrasta os pesos para o que o modelo gera mal (medido: média 1.01
-        # contra 0.85 sem sono).
+        # Sleep plasticity is not waking plasticity: the acetylcholine level
+        # changes and replay acts with reduced gain. Dreaming at the full
+        # rate drags the weights toward what the model generates badly
+        # (measured: mean 1.01 against 0.85 without sleep).
         from dataclasses import replace as _replace
         original = self.cfg
         self.cfg = _replace(original, w_lr=original.w_lr * lr_scale,
@@ -421,14 +430,14 @@ class PCNetwork:
         return {"replayed": replayed, "dreamed": dreamed}
 
     def consolidate(self, n_episodes: int = 16, passes: int = 1) -> int:
-        """O sono: reproduz episódios e destila-os nos pesos.
+        """Sleep: replays episodes and distills them into the weights.
 
-        Corre a mesma regra local de sempre sobre as tramas guardadas, como se
-        estivessem a acontecer agora. O que se repetiu — os traços fortes — é
-        escolhido primeiro. Devolve quantos episódios foram reproduzidos.
+        Runs the same local rule as always over the stored frames, as if
+        they were happening now. What repeated - the strong traces - is
+        chosen first. Returns how many episodes were replayed.
 
-        Isto é offline de propósito: não acontece enquanto se observa, e por
-        isso não compete com a inferência nem gasta energia no sensor.
+        This is offline on purpose: it does not happen while observing, and
+        so it does not compete with inference or spend energy at the sensor.
         """
         if self.memory is None:
             return 0
@@ -437,10 +446,10 @@ class PCNetwork:
         try:
             for _ in range(passes):
                 for slot in self.memory.replay(n_episodes, self._replay_rng):
-                    # Repor o contexto antes de reviver o episódio: o estado do
-                    # topo que a memória guardou, e a trama anterior de que a
-                    # via rápida precisa. É a completação de padrões — a chave
-                    # traz de volta o estado, não só o conteúdo.
+                    # Restore the context before reliving the episode: the top
+                    # state the memory stored, and the previous frame the fast
+                    # path needs. It is pattern completion - the key brings
+                    # back the state, not just the content.
                     self._z_prev[self.L][:] = self.memory.keys[slot]
                     self._z_prev[0][:] = self.memory.prev_frames[slot]
                     for l in range(1, self.L):
@@ -452,16 +461,16 @@ class PCNetwork:
         return replayed
 
     def _reconstruct(self, slot: int) -> np.ndarray:
-        """A observação tal como aconteceu, guardada no episódio."""
+        """The observation as it happened, stored in the episode."""
         assert self.memory is not None
         return self.memory.frames[slot]
 
     # ------------------------------------------------------------------
-    # um passo de tempo
+    # one time step
     # ------------------------------------------------------------------
     def step(self, x: np.ndarray, learn: bool = True,
              use_memory: bool = True) -> StepTrace:
-        """Processa uma trama. Devolve o traço de instrumentação."""
+        """Processes one frame. Returns the instrumentation trace."""
         cfg = self.cfg
         x = np.asarray(x, dtype=F)
         if x.shape != (cfg.sizes[0],):
@@ -472,9 +481,9 @@ class PCNetwork:
         trace = StepTrace()
         trace.target_rms = float(np.sqrt(np.mean(np.square(x))))
 
-        # --- 0. o crítico julga a aprendizagem anterior -----------------
-        # A atualização de t-1 só se prova na previsão de t. Se a surpresa
-        # em malha aberta desta trama exceder o habitual, desfaz-se.
+        # --- 0. the critic judges the previous learning -----------------
+        # The update from t-1 only proves itself in the prediction at t. If
+        # the open-loop surprise of this frame exceeds the usual, it is undone.
         if cfg.critic_retract > 0.0 and self._critic_snapshot is not None:
             pred = self.predict_next()
             e_now = float(np.mean((x - pred) ** 2))
@@ -494,13 +503,14 @@ class PCNetwork:
             self._critic_ema = (0.98 * self._critic_ema + 0.02 * e_now
                                 if self._critic_ema > 0.0 else e_now)
 
-        # --- 1. a previsão desce ---------------------------------------
-        # Cada nível latente recebe duas previsões: a do nível de cima e a do
-        # seu próprio passado, à sua escala de tempo. Combinam-se pela
-        # precisão de cada uma.
+        # --- 1. the prediction descends ---------------------------------
+        # Each latent level receives two predictions: the one from the level
+        # above and the one from its own past, at its own timescale. They are
+        # combined by the precision of each.
         fast = np.asarray(self._fast_prediction(), dtype=F).copy()
-        # A memória opina antes de se ver os dados, a partir do contexto: "da
-        # última vez que o mundo estava assim, a previsão falhou por isto".
+        # The memory weighs in before the data is seen, from the context:
+        # "last time the world looked like this, the prediction missed by
+        # this much".
         key = self._z_prev[self.L].copy()
         recall = (self._memory_recall().copy() if (use_memory and self.memory)
                   else np.zeros_like(fast))
@@ -517,35 +527,36 @@ class PCNetwork:
             if trans is not None:
                 temporal_prior[l] = trans.predict(self._z_prev[l]).copy()
             self.z[l][:] = self._combine_priors(l, from_above)
-        self.z[0][:] = x  # o nível sensorial é fixado pelos dados
+        self.z[0][:] = x  # the sensory level is clamped by the data
 
-        # --- 2. a surpresa sobe (assentamento iterativo) ----------------
+        # --- 2. the surprise rises (iterative settling) ----------------
         eps_thr: list[np.ndarray] = [None] * (self.L + 1)  # type: ignore[list-item]
         eps_mod: list[np.ndarray] = [None] * self.L  # type: ignore[list-item]
         eps_temp: list[np.ndarray] = [None] * (self.L + 1)  # type: ignore[list-item]
         prev_surprise = np.inf
 
         for k in range(cfg.max_iters + 1):
-            # A "surpresa" é a energia F = ½Σ‖ε_l‖², somada sobre os níveis.
-            # É esta a quantidade que a dinâmica de assentamento desce, logo é
-            # a única que se pode usar como critério de convergência. (A soma
-            # dos |ε| não serve: os níveis latentes arrancam com ε=0 por
-            # construção — foram inicializados pela previsão de cima — e
-            # crescem à medida que assumem a sua parte da explicação, o que
-            # faz a soma L1 oscilar mesmo quando a energia desce.)
+            # The "surprise" is the energy F = ½Σ‖ε_l‖², summed over the
+            # levels. This is the quantity the settling dynamics descends, so
+            # it is the only one usable as a convergence criterion. (The sum
+            # of the |ε| does not work: the latent levels start with ε=0 by
+            # construction - they were initialized by the prediction from
+            # above - and grow as they take on their share of the
+            # explanation, which makes the L1 sum oscillate even while the
+            # energy descends.)
             surprise = 0.0
             transmitted = 0.0
 
-            # erros hierárquicos: ε^h_l = z_l − f(W_l z_{l+1})
-            # No nível sensorial soma-se a via rápida: a hierarquia só tem de
-            # explicar o que ela não conseguiu.
+            # hierarchical errors: ε^h_l = z_l − f(W_l z_{l+1})
+            # At the sensory level the fast path is added: the hierarchy only
+            # has to explain what it could not.
             for l in range(self.L):
                 zhat = self.layers[l].predict(self.z[l + 1])
                 eps = self.z[l] - zhat
                 if l == 0 and (self.A0 is not None or self.memory is not None):
                     eps = (eps - fast).astype(F, copy=False)
                 if k == 0 and l == 0:
-                    # ε_0 antes de qualquer correção: o erro de previsão honesto.
+                    # ε_0 before any correction: the honest prediction error.
                     trace.pred_error = eps.copy()
                 pi = self.prec_hier[l]
                 surprise += 0.5 * float(np.dot(eps, pi.weight(eps)))
@@ -554,8 +565,8 @@ class PCNetwork:
                 eps_thr[l] = et
                 eps_mod[l] = self.layers[l].modulated_error(pi.weight(et))
 
-            # erros temporais: ε^t_l = z_l − f(A_l z_l(t-1)), por nível latente.
-            # No topo é o único erro que existe (não há nível acima).
+            # temporal errors: ε^t_l = z_l − f(A_l z_l(t-1)), per latent level.
+            # At the top it is the only error there is (there is no level above).
             for l in range(1, self.L + 1):
                 prior = temporal_prior[l]
                 if prior is None:
@@ -572,12 +583,14 @@ class PCNetwork:
             trace.surprise.append(surprise)
             trace.transmitted.append(transmitted)
 
-            # --- quando parar ------------------------------------------
-            # Nada passou o limiar: a previsão explicou a entrada. Silêncio.
+            # --- when to stop ------------------------------------------
+            # Nothing passed the threshold: the prediction explained the
+            # input. Silence.
             if transmitted <= cfg.settle_tol:
                 trace.exit_reason = EXIT_EXPLAINED
                 break
-            # A iterar sem lucro: mais uma iteração não paga o que custa.
+            # Iterating without profit: one more iteration does not pay for
+            # what it costs.
             if k > 0:
                 gain = prev_surprise - surprise
                 if gain < cfg.settle_min_gain or (
@@ -591,14 +604,14 @@ class PCNetwork:
                 break
             prev_surprise = surprise
 
-            # --- correção dos estados de cima --------------------------
+            # --- correction of the states above --------------------------
             # Δz_l = z_lr · ( W_{l-1}ᵀ(π ε̃^h_{l-1} ⊙ f') − π ε̃^h_l − π ε̃^t_l )
             #
-            # Três forças sobre cada estado latente: o erro que sobe de baixo
-            # (o que o nível ainda não explicou), o erro contra a previsão do
-            # nível de cima, e o erro contra o que ele próprio previu no
-            # instante anterior. É a última que a versão do passo 1 só tinha
-            # no topo.
+            # Three forces on each latent state: the error rising from below
+            # (what the level has not yet explained), the error against the
+            # prediction of the level above, and the error against what it
+            # itself predicted at the previous instant. It is the last one
+            # that the step 1 version only had at the top.
             for l in range(1, self.L + 1):
                 lay = self.layers[l - 1]
                 up = lay.backward(eps_mod[l - 1], eps_thr[l - 1])
@@ -624,9 +637,9 @@ class PCNetwork:
                     self.z[l][:k] = self.top_clamp
             trace.iters += 1
 
-        # --- 3. aprendizagem local -------------------------------------
-        # O crítico precisa do estado PRÉ-atualização para poder retrair:
-        # o instantâneo tira-se antes de aprender, julga-se na próxima trama.
+        # --- 3. local learning -------------------------------------
+        # The critic needs the PRE-update state to be able to retract:
+        # the snapshot is taken before learning, judged on the next frame.
         if learn and cfg.critic_retract > 0.0:
             snap = {"W": [lay.W.copy() for lay in self.layers]}
             if self.gated is not None:
@@ -635,7 +648,7 @@ class PCNetwork:
                 snap["gb"] = self.gated.b.copy()
             self._critic_snapshot = snap
         if learn and cfg.plasticity_gate > 0.0:
-            # Neuromodulação: a plasticidade só abre quando há novidade.
+            # Neuromodulation: plasticity only opens when there is novelty.
             self._surprise_avg = (0.99 * getattr(self, "_surprise_avg", 0.0)
                                   + 0.01 * trace.open_loop_surprise)
             if trace.open_loop_surprise < cfg.plasticity_gate * self._surprise_avg:
@@ -659,8 +672,8 @@ class PCNetwork:
                     )
             if cfg.use_transition:
                 self._learn_transition(eps_thr[self.L])
-            # cada transição aprende com o seu próprio erro temporal e com o
-            # seu próprio passado — nada mais local do que isto
+            # each transition learns from its own temporal error and its own
+            # past - nothing more local than this
             for l in range(1, self.L):
                 trans = self.transitions[l]
                 if trans is not None and eps_temp[l] is not None:
@@ -670,31 +683,34 @@ class PCNetwork:
                     self.prec_temp[l].learn(self.z[l] - temporal_prior[l])
             self._anchor_precisions()
             if self.A0 is not None:
-                # A via rápida aprende com o *seu próprio* erro (x − A_0·x_ant),
-                # não com o resíduo que sobra depois da hierarquia.
+                # The fast path learns from its *own* error (x − A_0·x_prev),
+                # not from the residual left over after the hierarchy.
                 #
-                # Treinar as duas vias com o mesmo resíduo parece elegante e é
-                # um desastre: ambas perseguem o mesmo sinal ao mesmo tempo,
-                # sem nada que atribua crédito, e disputam-no. Medido: ETTm1
-                # passou de 0.230 para 0.724. Com alvos separados cada via faz
-                # o que sabe — a rápida prevê o que consegue sozinha, a
-                # profunda explica o que sobrou — que é a divisão de trabalho
-                # que a hipótese das duas vias afirma existir.
-                # Passo normalizado (NLMS). A regra delta ΔA ∝ ε·xᵀ só é
-                # estável para lr < 1/‖x‖², e ‖x‖ depende da trama e da escala
-                # do sinal — um lr fixo está sempre errado para algum sinal.
-                # Dividir por ‖x‖² torna o passo adimensional: `fast_path_lr`
-                # passa a significar "que fração do erro corrigir por trama",
-                # entre 0 e ~2, e deixa de ser um número a afinar por dataset.
-                # É a mesma armadilha do z_lr, e a mesma correção.
+                # Training both paths with the same residual seems elegant
+                # and is a disaster: both chase the same signal at the same
+                # time, with nothing to assign credit, and they fight over
+                # it. Measured: ETTm1 went from 0.230 to 0.724. With separate
+                # targets each path does what it knows - the fast one
+                # predicts what it can on its own, the deep one explains what
+                # remained - which is the division of labor the two-path
+                # hypothesis claims to exist.
+                # Normalized step (NLMS). The delta rule ΔA ∝ ε·xᵀ is only
+                # stable for lr < 1/‖x‖², and ‖x‖ depends on the frame and on
+                # the signal's scale - a fixed lr is always wrong for some
+                # signal. Dividing by ‖x‖² makes the step dimensionless:
+                # `fast_path_lr` comes to mean "what fraction of the error to
+                # correct per frame", between 0 and ~2, and stops being a
+                # number to tune per dataset. It is the same trap as z_lr,
+                # and the same fix.
                 #
-                # A normalização vem *antes* do clip, de propósito: clipar
-                # primeiro reintroduz a dependência da escala que ela existe
-                # para eliminar (com o sinal 100× maior, todas as entradas
-                # saturam no clip e a direção do passo perde-se).
-                # A via rápida aprende contra o seu próprio alvo, sem contar
-                # com o que a memória recuperou — senão as duas voltam a
-                # disputar o mesmo resíduo.
+                # The normalization comes *before* the clip, on purpose:
+                # clipping first reintroduces the scale dependence it exists
+                # to eliminate (with the signal 100x larger, every entry
+                # saturates at the clip and the direction of the step is
+                # lost).
+                # The fast path learns against its own target, not counting
+                # what the memory retrieved - otherwise the two go back to
+                # fighting over the same residual.
                 own_error = (self.z[0] - fast + recall).astype(F, copy=False)
                 norm = float(np.dot(self._z_prev[0], self._z_prev[0])) + 1e-6
                 dA0 = np.outer(own_error / norm, self._z_prev[0]).astype(F, copy=False)
@@ -702,10 +718,10 @@ class PCNetwork:
                     np.clip(dA0, -cfg.grad_clip, cfg.grad_clip, out=dA0)
                 self.A0 += F(cfg.fast_path_lr) * dA0
 
-        # --- 4. memória episódica --------------------------------------
-        # Grava-se o que surpreendeu, com a chave que estava em vigor quando a
-        # previsão foi feita — para que da próxima vez que o contexto se
-        # pareça com este, a correção esteja lá.
+        # --- 4. episodic memory --------------------------------------
+        # What surprised is recorded, with the key that was in effect when
+        # the prediction was made - so that the next time the context looks
+        # like this one, the correction is there.
         if self.memory is not None:
             if learn and trace.pred_error is not None:
                 self.memory.write(
@@ -714,7 +730,7 @@ class PCNetwork:
                 )
             self.memory.decay()
 
-        # o estado atravessa para a trama seguinte
+        # the state crosses over to the next frame
         self._z_prev[0][:] = self.z[0]
         for l in range(1, self.L + 1):
             self._z_prev[l][:] = self.z[l]
@@ -722,7 +738,7 @@ class PCNetwork:
 
     # ------------------------------------------------------------------
     def _learn_transition(self, eps_top_thr: np.ndarray) -> None:
-        """ΔA ∝ (ε_topo ⊙ f') ⊗ z_topo(t-1). Também local."""
+        """ΔA ∝ (ε_top ⊙ f') ⊗ z_top(t-1). Also local."""
         cfg = self.cfg
         if self.gated is not None:
             self.gated.learn(eps_top_thr, cfg.a_lr, cfg.grad_clip)
@@ -740,13 +756,13 @@ class PCNetwork:
         self._refresh_transition()
 
     def _anchor_precisions(self) -> None:
-        """Fixa a escala das precisões no canal sensorial.
+        """Pins the scale of the precisions at the sensory channel.
 
-        π do nível 0 fica sempre em 1 e todos os outros passam a significar
-        "este erro vale k vezes um erro sensorial". Sem esta âncora, todas as
-        precisões sobem juntas à medida que a rede aprende (π → 1/⟨ε²⟩), o
-        Hessiano infla, o passo de assentamento adaptativo encolhe para não
-        divergir, e a inferência deixa de acontecer.
+        π of level 0 always stays at 1 and all the others come to mean "this
+        error is worth k times a sensory error". Without this anchor, all
+        precisions rise together as the network learns (π → 1/⟨ε²⟩), the
+        Hessian inflates, the adaptive settling step shrinks to avoid
+        diverging, and inference stops happening.
         """
         if not self.cfg.use_precision:
             return
@@ -758,11 +774,11 @@ class PCNetwork:
 
     @staticmethod
     def _compete(z: np.ndarray, frac: float) -> None:
-        """Só as k unidades mais fortes sobrevivem; as outras vão a zero.
+        """Only the k strongest units survive; the others go to zero.
 
-        Inibição lateral, in-place. É o mecanismo pelo qual contextos
-        diferentes passam a usar populações diferentes — e dois mundos que
-        usam neurónios diferentes não se apagam um ao outro.
+        Lateral inhibition, in-place. It is the mechanism by which different
+        contexts come to use different populations - and two worlds that use
+        different neurons do not erase each other.
         """
         k = max(1, int(round(frac * z.size)))
         if k >= z.size:
@@ -771,17 +787,17 @@ class PCNetwork:
         z[np.abs(z) < cut] = 0.0
 
     def _z_lr_for(self, level: int) -> float:
-        """Passo de assentamento do nível `level`, limitado pela estabilidade.
+        """Settling step of level `level`, bounded by stability.
 
-        O Hessiano da energia em ordem a z_l é
+        The Hessian of the energy with respect to z_l is
 
             π^h_l·I  +  π^t_l·I  +  π^h_{l-1}·W_{l-1}ᵀW_{l-1}
 
-        (o termo temporal contribui identidade porque z_l(t-1) está fixo),
-        logo o maior valor próprio é π^h_l + π^t_l + π^h_{l-1}·σ_max(W)² e o
-        passo estável é 2 sobre isso. Com precisão ligada, os ganhos entram
-        aqui — é o que impede um nível de precisão alta de desestabilizar o
-        assentamento.
+        (the temporal term contributes identity because z_l(t-1) is fixed),
+        so the largest eigenvalue is π^h_l + π^t_l + π^h_{l-1}·σ_max(W)² and
+        the stable step is 2 over that. With precision on, the gains enter
+        here - it is what prevents a high-precision level from destabilizing
+        the settling.
         """
         if not self.cfg.adaptive_z_lr:
             return self.cfg.z_lr
@@ -793,15 +809,16 @@ class PCNetwork:
         return min(self.cfg.z_lr, self.cfg.z_lr_safety * 2.0 / max(lam, 1e-12))
 
     def _threshold(self, eps: np.ndarray, trace: StepTrace, prec=None) -> np.ndarray:
-        """|ε| < θ não é transmitido. É aqui que nasce a esparsidade real.
+        """|ε| < θ is not transmitted. This is where real sparsity is born.
 
-        O limiar aplica-se ao erro *normalizado* √π·ε, não ao erro cru: assim
-        θ significa "meio desvio-padrão de surpresa" em qualquer nível, em vez
-        de significar coisas diferentes no sinal cru e no latente abstrato.
-        Sem precisão, √π = 1 e volta a ser o limiar do passo 1.
+        The threshold applies to the *normalized* error √π·ε, not to the raw
+        error: this way θ means "half a standard deviation of surprise" at
+        any level, instead of meaning different things in the raw signal and
+        in the abstract latent. Without precision, √π = 1 and it goes back to
+        being the step 1 threshold.
 
-        E é aqui que o ADC entra: só o que passa o limiar é convertido, por
-        isso a quantização aplica-se depois de silenciar, não antes.
+        And this is where the ADC comes in: only what passes the threshold is
+        converted, so quantization applies after silencing, not before.
         """
         trace.eps_total += eps.size
         if self.cfg.theta <= 0.0:
@@ -818,12 +835,12 @@ class PCNetwork:
         return out
 
     # ------------------------------------------------------------------
-    # sequências
+    # sequences
     # ------------------------------------------------------------------
     def run(
         self, frames: np.ndarray, learn: bool = True, reset: bool = False
     ) -> list[StepTrace]:
-        """Corre uma sequência de tramas (n_frames, n_sensory)."""
+        """Runs a sequence of frames (n_frames, n_sensory)."""
         frames = np.asarray(frames, dtype=F)
         if frames.ndim != 2:
             raise ValueError("frames tem de ter forma (n_frames, n_sensory)")
@@ -832,7 +849,7 @@ class PCNetwork:
         return [self.step(frame, learn=learn) for frame in frames]
 
     # ------------------------------------------------------------------
-    # pesos (fronteira com o C)
+    # weights (boundary with the C)
     # ------------------------------------------------------------------
     @property
     def weights(self) -> list[np.ndarray]:

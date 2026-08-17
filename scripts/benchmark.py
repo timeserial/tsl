@@ -1,38 +1,40 @@
 #!/usr/bin/env python3
-"""Comparar a rede preditiva com o que realmente compete neste nicho.
+"""Compare the predictive network against what actually competes in this niche.
 
     .venv/bin/python scripts/benchmark.py --data data/ETTm1.csv --column OT
     .venv/bin/python scripts/benchmark.py --wav data/Funk.wav
     .venv/bin/python scripts/benchmark.py --toy
 
-Não com um LLM: um LLM não resolve este problema e este modelo não resolve o
-do LLM. Com as coisas que resolvem *este* problema — persistência, AR linear,
-MLP, GRU e um transformer causal pequeno — todas com orçamento de parâmetros
-comparável e todas no mesmo protocolo:
+Not against an LLM: an LLM does not solve this problem and this model does not
+solve the LLM's. Against the things that solve *this* problem - persistence,
+linear AR, MLP, GRU and a small causal transformer - all with a comparable
+parameter budget and all under the same protocol:
 
-  **Streaming, um passo à frente.** No instante t o modelo vê tudo até t e
-  tem de dizer a trama t+1. Ninguém vê o futuro, ninguém treina no teste, e a
-  normalização usa só estatísticas do troço de treino.
+  **Streaming, one step ahead.** At time t the model sees everything up to t
+  and has to produce frame t+1. Nobody sees the future, nobody trains on the
+  test set, and normalization uses only statistics from the training segment.
 
-Três colunas de custo, porque uma só mente:
+Three cost columns, because a single one lies:
 
-  * **MACs/trama** — o custo num processador digital. Aqui a rede preditiva
-    perde, e perde por uma margem grande: assentar iterativamente faz várias
-    passagens onde os outros fazem uma. Convém dizê-lo antes de alguém o
-    descobrir por nós.
-  * **conversões ADC/trama** — o custo num crossbar analógico, onde as
-    multiplicações são feitas pela física (lei de Ohm) e o que se paga é
-    converter resultados para o domínio digital. Para os outros modelos é
-    uma constante: toda a saída de cada camada tem de ser convertida. Para a
-    rede preditiva é medido, e só conta o erro que passa o limiar.
-  * **parâmetros** — quanta memória é preciso ter lá dentro.
+  * **MACs/trama** - the cost on a digital processor. Here the predictive
+    network loses, and loses by a large margin: settling iteratively makes
+    several passes where the others make one. Better to say it before someone
+    discovers it for us.
+  * **ADC conversions per frame** - the cost on an analog crossbar, where the
+    multiplications are done by physics (Ohm's law) and what you pay for is
+    converting results to the digital domain. For the other models it is a
+    constant: every output of every layer has to be converted. For the
+    predictive network it is measured, and only the error that crosses the
+    threshold counts.
+  * **parameters** - how much memory has to be kept inside.
 
-É a segunda coluna que carrega a tese inteira. Se a rede preditiva não ganhar
-aí, não ganha em lado nenhum, porque em MACs digitais já perdeu.
+It is the second column that carries the whole thesis. If the predictive
+network does not win there, it wins nowhere, because in digital MACs it has
+already lost.
 
-Aviso que vale a pena repetir: o tempo de relógio no Mac não é dado como
-métrica de propósito. Aqui a esparsidade não acelera nada e mediria a máquina
-errada (secção 6 do CONTEXTO.md). O que se compara é exatidão e operações.
+A warning worth repeating: wall-clock time on the Mac is deliberately not given
+as a metric. Here sparsity speeds nothing up and it would measure the wrong
+machine (section 6 of CONTEXTO.md). What is compared is accuracy and operations.
 """
 
 from __future__ import annotations
@@ -55,18 +57,18 @@ from pcnet.dtypes import F  # noqa: E402
 from pcnet.report import pm, rule, table  # noqa: E402
 from pcnet.train import train as pc_train  # noqa: E402
 
-WARMUP = 32  # tramas de contexto dadas a toda a gente antes de pontuar
+WARMUP = 32  # context frames given to everyone before scoring
 
 
 # ---------------------------------------------------------------------------
-# métricas, calculadas exatamente da mesma maneira para todos
+# metrics, computed exactly the same way for everyone
 # ---------------------------------------------------------------------------
 def nrmse(pred: np.ndarray, target: np.ndarray) -> float:
-    """Erro quadrático médio normalizado pela energia do alvo, agregado.
+    """Mean squared error normalized by the target's energy, aggregated.
 
-    Agregado e não média por trama: uma trama quase silenciosa tem RMS
-    minúsculo e faria explodir uma média de rácios. Este número é robusto e é
-    o que a literatura de forecasting usa.
+    Aggregated, not averaged per frame: a nearly silent frame has a tiny RMS
+    and would blow up an average of ratios. This number is robust and is the
+    one the forecasting literature uses.
     """
     err = float(np.mean(np.square(pred - target)))
     ref = float(np.mean(np.square(target)))
@@ -78,10 +80,10 @@ def mae(pred: np.ndarray, target: np.ndarray) -> float:
 
 
 # ---------------------------------------------------------------------------
-# os modelos. Todos expõem fit(train) e stream(context, test) -> (preds, macs)
+# the models. All expose fit(train) and stream(context, test) -> (preds, macs)
 # ---------------------------------------------------------------------------
 class Persistence:
-    name = "persistência (repetir a anterior)"
+    name = "persistence (repeat previous)"
     n_params = 0
 
     def fit(self, train):
@@ -95,16 +97,16 @@ class Persistence:
 
 
 class RidgeAR:
-    """Regressão linear da próxima trama nas k anteriores. Forma fechada.
+    """Linear regression of the next frame on the k previous ones. Closed form.
 
-    A linha de base clássica que mais gente subestima: para sinais com
-    estrutura linear é muito difícil de bater, e custa uma multiplicação
-    matriz-vetor.
+    The classic baseline most people underestimate: for signals with linear
+    structure it is very hard to beat, and it costs one matrix-vector
+    multiplication.
     """
 
     def __init__(self, order=4, ridge=1e-3):
         self.order, self.ridge = order, ridge
-        self.name = f"AR linear (ordem {order})"
+        self.name = f"linear AR (order {order})"
 
     def fit(self, train):
         k, D = self.order, train.shape[1]
@@ -124,15 +126,15 @@ class RidgeAR:
             feats = np.concatenate([seq[i - k : i].ravel(), [1.0]])
             preds.append(feats @ self.Wt)
         macs = float(self.Wt.shape[0] * self.Wt.shape[1])
-        # uma conversão por saída: o crossbar produz correntes, o ADC lê-as
+        # one conversion per output: the crossbar produces currents, the ADC reads them
         self.adc = float(self.Wt.shape[1])
         return np.array(preds, dtype=F), macs
 
 
 class PCNetModel:
-    """A nossa. Online, aprende durante o treino e depois congela."""
+    """Ours. Online, learns during training and then freezes."""
 
-    def __init__(self, label="rede preditiva", epochs=60, **cfg_kw):
+    def __init__(self, label="predictive network", epochs=60, **cfg_kw):
         self.name = label
         self.epochs = epochs
         self.cfg_kw = cfg_kw
@@ -160,22 +162,22 @@ class PCNetModel:
     def stream(self, context, test):
         net = self.net
         net.reset()
-        for frame in context:  # aquece o estado, sem pontuar
+        for frame in context:  # warms up the state, without scoring
             net.step(frame, learn=False)
         preds, traces = [], []
         for frame in test:
             preds.append(net.predict_next())
             traces.append(net.step(frame, learn=False))
         macs = float(np.mean([t.macs_down + t.macs_up for t in traces]))
-        # só o erro que passa o limiar é convertido — é este o número que a
-        # arquitetura promete reduzir, e é medido, não estimado
+        # only the error that crosses the threshold is converted - this is the
+        # number the architecture promises to reduce, and it is measured, not estimated
         self.adc = float(np.mean([t.adc_conversions for t in traces]))
         self.last_traces = traces
         return np.array(preds, dtype=F), macs
 
 
 # ---------------------------------------------------------------------------
-# baselines em torch
+# torch baselines
 # ---------------------------------------------------------------------------
 def torch_models(frame_len: int, budget: int, device: str):
     import torch
@@ -229,7 +231,7 @@ def torch_models(frame_len: int, budget: int, device: str):
                 feats = torch.stack([padded[i : i + k].reshape(-1)
                                      for i in range(len(seq))])
                 return self.net(feats)
-            # transformer causal
+            # causal transformer
             return self.net(seq)
 
         def stream(self, context, test):
@@ -240,7 +242,7 @@ def torch_models(frame_len: int, budget: int, device: str):
                 pred = self._forward(seq[:-1])
             return pred[len(context) - 1 :].cpu().numpy().astype(F), self.macs
 
-    # -- tamanhos escolhidos para ficarem perto do orçamento de parâmetros --
+    # -- sizes chosen to land close to the parameter budget --
     h = max(4, int((-frame_len + np.sqrt(frame_len**2 + 4 * budget / 4)) / 4))
     gru = nn.Module()
     gru.rnn = nn.GRU(frame_len, h, batch_first=True)
@@ -256,7 +258,7 @@ def torch_models(frame_len: int, budget: int, device: str):
     mlp_macs = ctx_mlp * frame_len * hm + hm * frame_len
 
     class TinyTransformer(nn.Module):
-        """Um bloco causal: atenção de cabeça única + MLP, com posição aprendida."""
+        """One causal block: single-head attention + MLP, with learned positions."""
 
         def __init__(self, d_in, d_model, context):
             super().__init__()
@@ -282,7 +284,7 @@ def torch_models(frame_len: int, budget: int, device: str):
             hn = self.n1(x)
             att = self.q(hn) @ self.k(hn).T / np.sqrt(self.d)
             mask = torch.full((T, T), float("-inf"), device=seq.device).triu(1)
-            # janela causal finita, como um contexto deslizante
+            # finite causal window, like a sliding context
             band = torch.ones(T, T, device=seq.device).tril(0).triu(-self.context + 1)
             att = att + mask
             att = att.masked_fill(band == 0, float("-inf"))
@@ -300,11 +302,11 @@ def torch_models(frame_len: int, budget: int, device: str):
     tf = TinyTransformer(frame_len, dm, ctx_tf).to(device)
     tf_macs = (2 * frame_len * dm) + 3 * dm * dm + ctx_tf * dm * 2 + 4 * dm * dm
 
-    # conversões ADC: uma por cada saída analógica que tem de virar digital
+    # ADC conversions: one for each analog output that has to become digital
     return [
         Wrapper("MLP", mlp, "mlp", ctx_mlp, mlp_macs, hm + frame_len),
         Wrapper("GRU", gru, "gru", 1, gru_macs, 4 * h + frame_len),
-        Wrapper(f"transformer causal (d={dm}, ctx={ctx_tf})", tf, "tf", ctx_tf,
+        Wrapper(f"causal transformer (d={dm}, ctx={ctx_tf})", tf, "tf", ctx_tf,
                 tf_macs, 6 * dm + frame_len),
     ]
 
@@ -318,7 +320,7 @@ def evaluate_model(model, ds: Dataset, seeds=(0,)) -> dict:
         try:
             model.fit(ds.train, seed=seed) if _takes_seed(model) else model.fit(ds.train)
             pred, m = model.stream(context, ds.test)
-        except Exception as exc:  # pragma: no cover - diagnóstico
+        except Exception as exc:  # pragma: no cover - diagnostics
             return {"name": model.name, "erro": f"{type(exc).__name__}: {exc}"}
         scores.append(nrmse(pred, ds.test))
         maes.append(mae(pred, ds.test))
@@ -346,16 +348,16 @@ def _takes_seed(model) -> bool:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--data", type=Path, help="CSV com cabeçalho")
+    ap.add_argument("--data", type=Path, help="CSV with a header")
     ap.add_argument("--column", default="OT")
     ap.add_argument("--wav", type=Path)
-    ap.add_argument("--har", type=Path, help="raiz do 'UCI HAR Dataset'")
-    ap.add_argument("--signal", default="total_acc_x", help="sinal inercial do HAR")
+    ap.add_argument("--har", type=Path, help="root of the 'UCI HAR Dataset'")
+    ap.add_argument("--signal", default="total_acc_x", help="HAR inertial signal")
     ap.add_argument("--toy", action="store_true")
     ap.add_argument("--frame-len", type=int, default=64)
     ap.add_argument("--epochs", type=int, default=60)
     ap.add_argument("--seeds", type=int, default=3)
-    ap.add_argument("--budget", type=int, default=3000, help="orçamento de parâmetros")
+    ap.add_argument("--budget", type=int, default=3000, help="parameter budget")
     ap.add_argument("--out", type=Path)
     args = ap.parse_args()
 
@@ -370,15 +372,15 @@ def main() -> int:
 
     seeds = tuple(range(args.seeds))
     print(ds.describe())
-    print(f"orçamento de parâmetros ~{args.budget}, {args.seeds} seeds\n")
+    print(f"parameter budget ~{args.budget}, {args.seeds} seeds\n")
 
     models = [
         Persistence(),
         RidgeAR(order=4),
-        PCNetModel("rede preditiva (passo 1)", epochs=args.epochs),
-        PCNetModel("rede preditiva (+ via rápida)", epochs=args.epochs,
+        PCNetModel("predictive network (step 1)", epochs=args.epochs),
+        PCNetModel("predictive network (+ fast path)", epochs=args.epochs,
                    fast_path=True),
-        PCNetModel("rede preditiva (+ via rápida + precisão)", epochs=args.epochs,
+        PCNetModel("predictive network (+ fast path + precision)", epochs=args.epochs,
                    fast_path=True, use_precision=True),
     ]
     try:
@@ -386,9 +388,9 @@ def main() -> int:
 
         models += torch_models(ds.frame_len, args.budget, "cpu")
     except ImportError:
-        print("  (torch não disponível — sem MLP/GRU/transformer)\n")
+        print("  (torch not available, no MLP/GRU/transformer)\n")
 
-    rule(f"{ds.name} — previsão da trama seguinte, streaming")
+    rule(f"{ds.name} - next-frame prediction, streaming")
     rows, results = [], []
     for model in models:
         r = evaluate_model(model, ds, seeds)
@@ -407,13 +409,14 @@ def main() -> int:
         print(f"  … {r['name']}")
     print()
     table(rows, ["modelo", "NRMSE", "MAE", "parâmetros", "MACs/trama", "ADC/trama"])
-    print("\n  NRMSE agregado sobre o troço de teste; 1.0 = tão bom como prever zero.")
-    print("  MACs/trama = custo num processador digital (a rede preditiva perde aqui:")
-    print("  assenta em várias passagens onde os outros fazem uma).")
-    print("  ADC/trama = custo num crossbar analógico, onde as multiplicações são")
-    print("  feitas pela física e o que se paga é converter. Para a rede preditiva é")
-    print("  medido e só conta o erro acima do limiar; para os outros, toda a saída")
-    print("  de cada camada tem de ser convertida. É esta coluna que carrega a tese.")
+    print("\n  NRMSE aggregated over the test segment; 1.0 = as good as predicting zero.")
+    print("  MACs/trama = cost on a digital processor (the predictive network loses")
+    print("  here: it settles over several passes where the others make one).")
+    print("  ADC/trama = cost on an analog crossbar, where the multiplications are")
+    print("  done by physics and what you pay for is converting. For the predictive")
+    print("  network it is measured and only the error above the threshold counts; for")
+    print("  the others, every output of every layer has to be converted. This is the")
+    print("  column that carries the thesis.")
 
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)

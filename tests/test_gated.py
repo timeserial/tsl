@@ -1,4 +1,4 @@
-"""Portões multiplicativos: a dinâmica escolhida pelo erro."""
+"""Multiplicative gates: the dynamics chosen by the error."""
 
 import numpy as np
 import pytest
@@ -25,14 +25,14 @@ def test_prediction_is_the_gated_mixture():
 def test_a_closed_gate_retains_and_an_open_gate_updates():
     t = make(4)
     z = np.array([0.5, -0.3, 0.2, 0.1], dtype=F)
-    t.b[:] = -20.0  # g -> 0: reter
+    t.b[:] = -20.0  # g -> 0: retain
     assert np.allclose(t.predict(z), z, atol=1e-4)
-    t.b[:] = 20.0  # g -> 1: seguir a dinâmica
+    t.b[:] = 20.0  # g -> 1: follow the dynamics
     assert np.allclose(t.predict(z), np.tanh(t.A @ z), atol=1e-4)
 
 
 def test_learning_closes_a_temporal_step():
-    """Com um par (antes, depois) fixo, a transição tem de o aprender."""
+    """With a fixed (before, after) pair, the transition has to learn it."""
     t = make(6, seed=1)
     z = np.array([0.6, -0.4, 0.3, 0.2, -0.5, 0.1], dtype=F)
     target = np.array([-0.4, 0.6, 0.2, 0.3, 0.1, -0.5], dtype=F)
@@ -45,12 +45,12 @@ def test_learning_closes_a_temporal_step():
 
 
 def test_the_gate_learns_where_to_hold_and_where_to_move():
-    """Metade das unidades deve reter, metade deve seguir a dinâmica: o
-    portão tem de divergir por unidade — é essa a modularidade que os
-    mecanismos anteriores (mistura, esparsidade) não conseguiam aprender."""
+    """Half of the units should retain, half should follow the dynamics: the
+    gate has to diverge per unit - that is the modularity the previous
+    mechanisms (mixture, sparsity) could not learn."""
     t = make(4, seed=2)
     z = np.array([0.5, 0.5, 0.5, 0.5], dtype=F)
-    # alvo: unidades 0-1 ficam como estão; 2-3 mudam de sinal
+    # target: units 0-1 stay as they are; 2-3 flip sign
     target = np.array([0.5, 0.5, -0.5, -0.5], dtype=F)
     for _ in range(2000):
         t.learn(target - t.predict(z), lr=0.3)
@@ -60,9 +60,9 @@ def test_the_gate_learns_where_to_hold_and_where_to_move():
 
 
 def test_credit_only_flows_through_open_gates():
-    """ΔA ∝ ε·g: com o portão fechado, a dinâmica não leva culpa nenhuma."""
+    """ΔA ∝ ε·g: with the gate closed, the dynamics takes no blame at all."""
     t = make(4)
-    t.b[:] = -20.0  # tudo fechado
+    t.b[:] = -20.0  # all closed
     A0 = t.A.copy()
     z = np.array([0.5, -0.3, 0.2, 0.1], dtype=F)
     t.predict(z)
@@ -71,13 +71,13 @@ def test_credit_only_flows_through_open_gates():
 
 
 def test_step_is_scale_invariant():
-    """NLMS: encolher o contexto 100× não muda o erro relativo final.
+    """NLMS: shrinking the context 100× does not change the final relative error.
 
-    Testa-se para baixo (1.0 vs 0.01) e não para cima, porque para cima o
-    tanh satura e a derivada morre — isso é saturação de ativação, que o GRU
-    e a biologia também têm; o NLMS protege o *passo*, não a ativação. Sem
-    NLMS, encolher a entrada 100× encolheria o passo efetivo 10 000× e a
-    aprendizagem congelava.
+    We test downward (1.0 vs 0.01) and not upward, because upward the tanh
+    saturates and the derivative dies - that is activation saturation, which
+    the GRU and biology also have; NLMS protects the *step*, not the
+    activation. Without NLMS, shrinking the input 100× would shrink the
+    effective step 10 000× and learning would freeze.
     """
     def rel(scale):
         t = make(4, seed=3)
@@ -107,13 +107,14 @@ def test_gated_and_plain_transitions_are_exclusive_paths():
     assert net.gated is not None
     A0 = net.A.copy()
     net.run(make_signal(n_frames=60, frame_len=32, seed=1).frames, learn=True)
-    # o A clássico fica intocado; o portão é que aprende
+    # the classic A stays untouched; it is the gate that learns
     assert np.array_equal(A0, net.A)
 
 
 def test_eligibility_trace_accumulates_and_decays_with_retention():
-    """O rasto é mecânica pura e testável: acumula o produto instantâneo e
-    decai a (1-g) — a retenção do portão é a meia-vida do crédito."""
+    """The trace is pure, testable mechanics: it accumulates the instantaneous
+    product and decays by (1-g) - the gate's retention is the half-life of the
+    credit."""
     from pcnet.gated import GatedTransition
 
     t = GatedTransition(3, np.random.default_rng(0), eligibility=True)
@@ -123,7 +124,7 @@ def test_eligibility_trace_accumulates_and_decays_with_retention():
     t.predict(z1)
     g1 = t.gate.copy()
     inst1 = np.outer((g1 * (1 - t._c**2)) / (float(z1 @ z1) + 1e-6), z1)
-    t.learn(np.zeros(3, dtype=F), lr=0.1)  # eps=0: só o rasto se move
+    t.learn(np.zeros(3, dtype=F), lr=0.1)  # eps=0: only the trace moves
     assert np.allclose(t.eA, inst1, atol=1e-5)
 
     t.predict(z2)
@@ -134,10 +135,10 @@ def test_eligibility_trace_accumulates_and_decays_with_retention():
 
 
 def test_eligibility_does_not_hurt_instant_credit_much():
-    """Num problema sem atraso, o rasto só pode custar um pouco de ruído de
-    crédito antigo — se custar muito, a implementação está errada. (O ganho
-    com atraso mede-se no benchmark, não aqui: construir atraso verdadeiro
-    num teste unitário requer a rede toda.)"""
+    """On a problem without delay, the trace can only cost a bit of stale
+    credit noise - if it costs a lot, the implementation is wrong. (The gain
+    with delay is measured in the benchmark, not here: building true delay in
+    a unit test requires the whole network.)"""
     from pcnet.gated import GatedTransition
 
     def residual(eligibility):

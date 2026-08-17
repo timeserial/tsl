@@ -1,10 +1,11 @@
-"""Instrumentação.
+"""Instrumentation.
 
-O que interessa medir não é a loss — é o custo. Três números por trama:
-surpresa por iteração de assentamento, fração de erros silenciados pelo
-limiar, e nº de iterações até o early exit disparar. A partir deles sai a
-contabilidade que o argumento energético precisa: conversões ADC (o gargalo
-caro do crossbar) proporcionais à surpresa e não à dimensão da rede.
+What matters to measure is not the loss - it is the cost. Three numbers per
+frame: surprise per settling iteration, fraction of errors silenced by the
+threshold, and number of iterations until the early exit fires. From these
+comes the accounting the energy argument needs: ADC conversions (the
+crossbar's expensive bottleneck) proportional to the surprise and not to the
+size of the network.
 """
 
 from __future__ import annotations
@@ -13,10 +14,11 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-# Porque é que o assentamento parou. A distinção interessa: "explicado" é o
-# early exit que queremos (previsão certa, silêncio, custo zero); "estagnado"
-# é a rede a desistir de algo que não sabe explicar — também poupa energia,
-# mas é uma admissão de ignorância, não uma vitória; "teto" é o caso caro.
+# Why the settling stopped. The distinction matters: "explained" is the
+# early exit we want (correct prediction, silence, zero cost); "stalled"
+# is the network giving up on something it cannot explain - it also saves
+# energy, but it is an admission of ignorance, not a victory; "ceiling" is
+# the expensive case.
 EXIT_EXPLAINED = "explicado"
 EXIT_STALLED = "estagnado"
 EXIT_CEILING = "teto"
@@ -24,32 +26,32 @@ EXIT_CEILING = "teto"
 
 @dataclass
 class StepTrace:
-    """Tudo o que uma trama gastou e revelou."""
+    """Everything a frame spent and revealed."""
 
-    # Surpresa = energia ½Σ‖ε_l‖² sobre todos os níveis, *antes* do limiar,
-    # uma entrada por avaliação de erro. O elemento 0 é a surpresa em malha
-    # aberta: o quanto a previsão descida do passo anterior falhou.
+    # Surprise = energy ½Σ‖ε_l‖² over all levels, *before* the threshold,
+    # one entry per error evaluation. Element 0 is the open-loop surprise:
+    # how much the prediction descended from the previous step missed.
     surprise: list[float] = field(default_factory=list)
-    # A mesma coisa depois do limiar: o que efetivamente subiu.
+    # The same thing after the threshold: what actually went up.
     transmitted: list[float] = field(default_factory=list)
 
-    iters: int = 0  # atualizações de estado realizadas
+    iters: int = 0  # state updates performed
     exit_reason: str = EXIT_CEILING
 
-    eps_total: int = 0  # componentes de erro avaliadas
-    eps_silenced: int = 0  # ... das quais ficaram abaixo do limiar
+    eps_total: int = 0  # error components evaluated
+    eps_silenced: int = 0  # ... of which stayed below the threshold
 
-    macs_up: int = 0  # MACs no caminho ascendente (esparso)
-    macs_up_dense: int = 0  # ... se nada fosse silenciado
-    macs_down: int = 0  # MACs no caminho descendente (denso; é o crossbar)
+    macs_up: int = 0  # MACs on the ascending path (sparse)
+    macs_up_dense: int = 0  # ... if nothing were silenced
+    macs_down: int = 0  # MACs on the descending path (dense; it is the crossbar)
 
-    # ε_0 em malha aberta: o erro de previsão da trama, o número "de ML".
+    # ε_0 in open loop: the frame's prediction error, the "ML" number.
     pred_error: np.ndarray | None = None
     target_rms: float = 0.0
 
     @property
     def early_exit(self) -> bool:
-        """Saiu antes de gastar o teto de iterações (por qualquer razão)."""
+        """Exited before spending the iteration ceiling (for any reason)."""
         return self.exit_reason != EXIT_CEILING
 
     @property
@@ -66,7 +68,7 @@ class StepTrace:
 
     @property
     def adc_conversions(self) -> int:
-        """Erros que passaram o limiar = conversões ADC necessárias."""
+        """Errors that passed the threshold = ADC conversions needed."""
         return self.eps_total - self.eps_silenced
 
     @property
@@ -77,13 +79,13 @@ class StepTrace:
 
     @property
     def pred_nrmse(self) -> float:
-        """RMSE normalizado pelo RMS do alvo: 1.0 = tão bom como prever zero."""
+        """RMSE normalized by the target RMS: 1.0 = as good as predicting zero."""
         return self.pred_rmse / self.target_rms if self.target_rms > 0 else 0.0
 
 
 @dataclass
 class RunStats:
-    """Agregado sobre uma sequência de tramas."""
+    """Aggregate over a sequence of frames."""
 
     n_steps: int = 0
     mean_iters: float = 0.0
@@ -93,8 +95,8 @@ class RunStats:
     early_exit_frac: float = 0.0
     explained_frac: float = 0.0
     stalled_frac: float = 0.0
-    mac_up_frac: float = 0.0  # MACs ascendentes efetivos / densos
-    adc_frac: float = 0.0  # conversões ADC / (rede densa, max_iters)
+    mac_up_frac: float = 0.0  # effective ascending MACs / dense
+    adc_frac: float = 0.0  # ADC conversions / (dense network, max_iters)
     pred_nrmse: float = 0.0
 
     def as_row(self) -> dict:
@@ -114,11 +116,11 @@ class RunStats:
 
 
 def summarize(traces: list[StepTrace], max_iters: int, eps_per_pass: int) -> RunStats:
-    """Reduz uma lista de tramas a uma linha de tabela.
+    """Reduces a list of frames to one table row.
 
-    `eps_per_pass` é o nº de componentes de erro de uma passagem densa; serve
-    de denominador para a fração de ADC no pior caso (rede densa a correr
-    sempre até ao teto de iterações).
+    `eps_per_pass` is the number of error components of one dense pass; it
+    serves as the denominator for the worst-case ADC fraction (a dense
+    network always running up to the iteration ceiling).
     """
     if not traces:
         return RunStats()

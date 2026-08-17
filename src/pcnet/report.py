@@ -1,4 +1,4 @@
-"""Tabelas de texto para os scripts. Sem dependências de plotting."""
+"""Text tables for the scripts. No plotting dependencies."""
 
 from __future__ import annotations
 
@@ -19,5 +19,5 @@ def table(rows: list[dict], cols: list[str] | None = None) -> None:
 
 
 def pm(mean: float, std: float, digits: int = 3) -> str:
-    """"0.283 ± 0.007" — nunca reportar uma média sem a dispersão."""
+    """"0.283 ± 0.007" - never report a mean without its spread."""
     return f"{mean:.{digits}f} ± {std:.{digits}f}"

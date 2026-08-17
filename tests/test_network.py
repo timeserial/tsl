@@ -1,4 +1,4 @@
-"""As quatro afirmações do passo 1, cada uma como um teste que pode falhar."""
+"""The four claims of step 1, each as a test that can fail."""
 
 import numpy as np
 import pytest
@@ -20,7 +20,7 @@ def small_signal(n_frames=200, seed=1, **kw):
 
 
 # --------------------------------------------------------------------------
-# mecânica
+# mechanics
 # --------------------------------------------------------------------------
 def test_frame_shape_is_checked():
     net = small_net()
@@ -51,7 +51,7 @@ def test_reset_clears_the_temporal_state():
 
 
 def test_evaluating_does_not_disturb_the_training_state():
-    """A rede é online: medir não pode alterar o que está a ser medido."""
+    """The network is online: measuring cannot alter what is being measured."""
     net = small_net()
     sig = small_signal(60)
     net.run(sig.frames[:30])
@@ -75,7 +75,7 @@ def test_training_curve_is_the_same_with_and_without_evaluation():
 
 
 def test_predict_next_is_the_open_loop_prediction():
-    """ε_0 na primeira avaliação é exatamente x − predict_next() do passo anterior."""
+    """ε_0 on the first evaluation is exactly x − predict_next() from the previous step."""
     net = small_net()
     sig = small_signal(30)
     net.run(sig.frames[:10])
@@ -105,15 +105,15 @@ def test_load_state_dict_rejects_wrong_shapes():
 
 
 # --------------------------------------------------------------------------
-# 1. a dinâmica de assentamento converge
+# 1. the settling dynamics converges
 # --------------------------------------------------------------------------
 def test_settling_decreases_the_energy():
-    """Cada iteração baixa a energia — exceto, quando muito, a última.
+    """Each iteration lowers the energy - except, at most, the last one.
 
-    O assentamento é descida de gradiente com passo fixo: perto do limite de
-    estabilidade a última avaliação pode subir um pouco. Se subir, é essa
-    subida que faz o critério de ganho mínimo parar o laço, por isso só pode
-    aparecer na última posição.
+    Settling is gradient descent with a fixed step: near the stability limit
+    the last evaluation can rise a little. If it rises, that rise is what
+    makes the minimum-gain criterion stop the loop, so it can only appear in
+    the last position.
     """
     net = small_net(theta=0.0)
     sig = small_signal(120)
@@ -132,7 +132,7 @@ def test_settling_never_exceeds_the_ceiling():
 
 
 def test_more_settling_explains_more():
-    """Deixar assentar mais reduz a energia final. Sem isto, iterar é inútil."""
+    """Letting it settle longer reduces the final energy. Without this, iterating is useless."""
     sig = small_signal(80)
     shallow = small_net(max_iters=1, settle_min_gain=0.0, theta=0.0)
     deep = small_net(max_iters=10, settle_min_gain=0.0, theta=0.0)
@@ -142,7 +142,7 @@ def test_more_settling_explains_more():
 
 
 # --------------------------------------------------------------------------
-# 2. a aprendizagem local funciona
+# 2. local learning works
 # --------------------------------------------------------------------------
 def test_local_learning_beats_the_persistence_baseline():
     sig = small_signal(300)
@@ -168,7 +168,7 @@ def test_learning_is_off_when_asked():
 
 
 def test_transition_learns_the_temporal_structure():
-    """Sem transição temporal o topo não tem como prever a trama seguinte."""
+    """Without a temporal transition the top has no way to predict the next frame."""
     sig = small_signal(300)
     tr, te = sig.split(0.8)
     with_t, without_t = small_net(), small_net(use_transition=False)
@@ -180,7 +180,7 @@ def test_transition_learns_the_temporal_structure():
 
 
 # --------------------------------------------------------------------------
-# 3. o limiar de esparsidade
+# 3. the sparsity threshold
 # --------------------------------------------------------------------------
 def test_threshold_zero_silences_nothing():
     net = small_net(theta=0.0)
@@ -199,7 +199,7 @@ def test_higher_threshold_silences_more_and_converte_menos():
     adc = [s.adc_frac for s in sweep]
     assert silenced[0] < silenced[1] < silenced[2]
     assert adc[0] > adc[1] > adc[2]
-    # o limiar é um botão de inferência: não mexe nos pesos
+    # the threshold is an inference knob: it does not touch the weights
     assert net.cfg.theta == PCConfig(**SMALL).theta
 
 
@@ -223,7 +223,7 @@ def test_sparsity_saves_upward_macs():
 
 
 # --------------------------------------------------------------------------
-# 4. o compute é proporcional à surpresa
+# 4. compute is proportional to surprise
 # --------------------------------------------------------------------------
 def test_surprising_frames_cost_more_than_banal_ones():
     sig = small_signal(300)
@@ -249,7 +249,7 @@ def test_surprising_frames_cost_more_than_banal_ones():
 
 
 def test_a_perfectly_predicted_input_becomes_almost_free():
-    """Constante repetida: depois de aprendida, quase deixa de custar."""
+    """A repeated constant: once learned, it almost stops costing anything."""
     net = small_net(theta=0.02)
     x = np.full(32, 0.3, dtype=F)
     traces = net.run(np.tile(x, (400, 1)), learn=True)
@@ -268,7 +268,7 @@ def test_ceiling_is_reported_as_such():
 
 
 # --------------------------------------------------------------------------
-# via rápida (secção 4 do CONTEXTO): uma via curta em paralelo com a profunda
+# fast path (section 4 of CONTEXTO): a short route in parallel with the deep one
 # --------------------------------------------------------------------------
 def test_fast_path_adds_a_direct_route_and_its_parameters():
     plain, fast = small_net(), small_net(fast_path=True)
@@ -277,8 +277,9 @@ def test_fast_path_adds_a_direct_route_and_its_parameters():
 
 
 def test_prediction_is_the_sum_of_the_two_routes():
-    """ẑ_0 = via rápida + hierarquia. A decomposição é aditiva de propósito:
-    assim o erro que cada via vê é o mesmo, e é o resíduo da outra."""
+    """ẑ_0 = fast path + hierarchy. The decomposition is additive on purpose:
+    that way the error each route sees is the same, and it is the residual of
+    the other."""
     net = small_net(fast_path=True)
     sig = small_signal(60)
     net.run(sig.frames[:20], learn=True)
@@ -291,19 +292,19 @@ def test_prediction_is_the_sum_of_the_two_routes():
 
 
 def test_each_route_learns_from_its_own_error():
-    """A via rápida aprende com (x − A₀·x_ant), não com o resíduo da hierarquia.
+    """The fast path learns from (x − A₀·x_prev), not from the hierarchy's residual.
 
-    Treinar as duas com o mesmo resíduo faz com que disputem o mesmo sinal sem
-    nada que atribua crédito — medido em ETTm1: 0.230 -> 0.724.
+    Training both on the same residual makes them fight over the same signal
+    with nothing to assign credit - measured on ETTm1: 0.230 -> 0.724.
     """
     net = small_net(fast_path=True)
     A0 = net.A0.copy()
     net.run(small_signal(60).frames, learn=True)
     assert not np.array_equal(A0, net.A0)
 
-    # A via rápida, sozinha (hierarquia congelada), tem de fechar o seu erro.
-    # O passo é normalizado por ‖x‖², logo fast_path_lr é a *fração* do erro
-    # corrigida por trama e não depende da escala do sinal.
+    # The fast path, on its own (hierarchy frozen), has to close its error.
+    # The step is normalized by ‖x‖², so fast_path_lr is the *fraction* of the
+    # error corrected per frame and does not depend on the signal scale.
     net2 = small_net(fast_path=True, fast_path_lr=0.5, w_lr=0.0, a_lr=0.0)
     x_prev = np.full(32, 0.5, dtype=F)
     x_now = np.full(32, -0.5, dtype=F)
@@ -313,7 +314,7 @@ def test_each_route_learns_from_its_own_error():
     before = err()
     for _ in range(30):
         net2.step(x_now, learn=True)
-        net2._z_prev[0][:] = x_prev  # manter o par (antes, depois) fixo
+        net2._z_prev[0][:] = x_prev  # keep the (before, after) pair fixed
     assert err() < 0.1 * before
 
 
@@ -326,8 +327,8 @@ def test_fast_path_is_frozen_when_not_learning():
 
 
 def test_hierarchy_still_contributes_with_the_fast_path_on():
-    """A via rápida não pode tornar a hierarquia decorativa: se os pesos
-    profundos mudarem, a previsão tem de mudar."""
+    """The fast path cannot make the hierarchy decorative: if the deep
+    weights change, the prediction has to change."""
     net = small_net(fast_path=True)
     net.run(small_signal(80).frames, learn=True)
     before = net.predict_next().copy()
@@ -337,12 +338,13 @@ def test_hierarchy_still_contributes_with_the_fast_path_on():
 
 
 def test_fast_path_step_is_scale_invariant():
-    """A taxa da via rápida não pode depender da escala do sinal.
+    """The fast path's rate cannot depend on the signal scale.
 
-    Com passo não normalizado, `lr` tem de ficar abaixo de 1/‖x‖², que muda
-    com o sinal — e um `lr` que funciona num conjunto diverge noutro. Foi assim
-    que a via rápida passou de 0.208 para 0.899 em ETTm1. Com o passo
-    normalizado, multiplicar o sinal por 100 não muda o erro *relativo*.
+    With an unnormalized step, `lr` has to stay below 1/‖x‖², which changes
+    with the signal - and an `lr` that works on one dataset diverges on
+    another. That is how the fast path went from 0.208 to 0.899 on ETTm1.
+    With the normalized step, multiplying the signal by 100 does not change
+    the *relative* error.
     """
     def relative_error(scale):
         net = small_net(fast_path=True, fast_path_lr=0.2, w_lr=0.0, a_lr=0.0)
@@ -360,23 +362,24 @@ def test_fast_path_step_is_scale_invariant():
 
 
 def test_the_critic_retracts_a_harmful_update():
-    """Frente 4: a atualização local é provisória até a trama seguinte a
-    validar. Se a surpresa disparar acima do habitual, os pesos voltam ao
-    estado PRÉ-atualização — daí o instantâneo ter de ser tirado antes de
-    aprender (a primeira versão tirava-o depois, e retrair não desfazia nada).
+    """Front 4: the local update is provisional until the next frame
+    validates it. If the surprise spikes above the usual, the weights go back
+    to the PRE-update state - hence the snapshot having to be taken before
+    learning (the first version took it afterwards, and retracting undid
+    nothing).
     """
     net = small_net(critic_retract=1.05, w_lr=0.5)
     sig = small_signal(80)
-    net.run(sig.frames[:60], learn=True)  # estabelecer a EMA
+    net.run(sig.frames[:60], learn=True)  # establish the EMA
 
     W_before = [lay.W.copy() for lay in net.layers]
-    net.step(sig.frames[60], learn=True)          # aprende (provisório)
+    net.step(sig.frames[60], learn=True)          # learns (provisional)
     changed = not all(np.array_equal(a, lay.W)
                       for a, lay in zip(W_before, net.layers))
     assert changed
     W_post_learn = [lay.W.copy() for lay in net.layers]
 
-    net.step(np.full(32, 5.0, dtype=F), learn=False)  # surpresa enorme -> veto
+    net.step(np.full(32, 5.0, dtype=F), learn=False)  # huge surprise -> veto
     reverted = all(np.array_equal(a, lay.W)
                    for a, lay in zip(W_before, net.layers))
     kept = all(np.array_equal(a, lay.W)

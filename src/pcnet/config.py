@@ -1,8 +1,8 @@
-"""Configuração da rede preditiva.
+"""Configuration of the predictive network.
 
-Um único dataclass, serializável, que é ao mesmo tempo o contrato com o
-inferidor em C: tudo o que aqui está tem de ser exprimível como `#define` ou
-como array estático.
+A single, serializable dataclass that is at the same time the contract with
+the C inference engine: everything in here must be expressible as a `#define`
+or as a static array.
 """
 
 from __future__ import annotations
@@ -12,168 +12,174 @@ from dataclasses import asdict, dataclass
 
 @dataclass(frozen=True)
 class PCConfig:
-    # Hierarquia. sizes[0] é o nível sensorial (a trama observada), o último
-    # é o topo. Default: 64 -> 32 -> 16 -> 8, como no plano.
+    # Hierarchy. sizes[0] is the sensory level (the observed frame), the last
+    # is the top. Default: 64 -> 32 -> 16 -> 8, as in the plan.
     sizes: tuple[int, ...] = (64, 32, 16, 8)
 
-    # Ativação do gerador por nível. O nível 0 é o sinal real, logo identidade;
-    # os níveis latentes usam tanh (limita o estado, dá derivada barata).
+    # Generator activation per level. Level 0 is the real signal, hence identity;
+    # the latent levels use tanh (bounds the state, gives a cheap derivative).
     sensory_activation: str = "identity"
     latent_activation: str = "tanh"
 
-    # --- dinâmica de assentamento -----------------------------------------
-    # Teto de passos de assentamento. É um teto, não um custo: o early exit
-    # mantém a média em ~8. Note-se que há um mínimo estrutural — o erro
-    # sensorial sobe um nível por iteração, logo abaixo de `n_levels - 1` o
-    # topo nunca chega a ser corrigido e a rede prevê zero.
+    # --- settling dynamics -------------------------------------------------
+    # Ceiling on settling steps. It is a ceiling, not a cost: the early exit
+    # keeps the average at ~8. Note there is a structural minimum, the
+    # sensory error climbs one level per iteration, so below `n_levels - 1`
+    # the top never gets corrected and the network predicts zero.
     max_iters: int = 25
-    # z_lr é um passo de descida no gradiente da energia ½Σ‖ε‖²: só é estável
-    # para z_lr < 2/(1 + σ_max(W)²). Como σ_max cresce com a aprendizagem, o
-    # valor seguro é baixo — a 0.5 a rede diverge. Ver também `z_clip`.
+    # z_lr is a descent step on the gradient of the energy ½Σ‖ε‖²: it is only
+    # stable for z_lr < 2/(1 + σ_max(W)²). Since σ_max grows with learning, the
+    # safe value is low, at 0.5 the network diverges. See also `z_clip`.
     z_lr: float = 0.2
-    # Com isto ligado, cada nível usa min(z_lr, z_lr_safety · 2/(1+σ_max²)) com
-    # σ_max estimado por iteração de potência sobre os pesos que o dispositivo
-    # realmente tem. Custa duas leituras do crossbar por atualização de pesos
-    # e é o que impede a variabilidade de dispositivo de atravessar o limite
-    # de estabilidade sem se dar por isso.
+    # With this on, each level uses min(z_lr, z_lr_safety · 2/(1+σ_max²)) with
+    # σ_max estimated by power iteration over the weights the device actually
+    # has. It costs two crossbar reads per weight update and is what keeps
+    # device variability from crossing the stability limit without anyone
+    # noticing.
     adaptive_z_lr: bool = True
     z_lr_safety: float = 0.9
-    # Saída "explicado": nada passa o limiar, não há o que transmitir.
+    # "explained" exit: nothing passes the threshold, there is nothing to transmit.
     settle_tol: float = 1e-6
-    # Saída "estagnado", critério absoluto: outra iteração custa energia, por
-    # isso só compensa se reduzir a energia do erro em pelo menos isto. Troca
-    # joules por joules — é a leitura física, e é a que faz o compute crescer
-    # com a surpresa (uma trama difícil ainda tem muito a ganhar por iteração).
+    # "stalled" exit, absolute criterion: another iteration costs energy, so
+    # it only pays off if it reduces the error energy by at least this much.
+    # Trades joules for joules, it is the physical reading, and it is what
+    # makes compute grow with surprise (a hard frame still has much to gain
+    # per iteration).
     settle_min_gain: float = 0.003
-    # Critério relativo alternativo (0 = desligado). Cuidado: para uma trama
-    # cujo resíduo é irredutível, a melhoria relativa colapsa de imediato e a
-    # rede desiste — poupa energia, mas gasta *menos* onde há *mais* surpresa,
-    # que é o contrário do que a arquitetura promete.
+    # Alternative relative criterion (0 = off). Careful: for a frame whose
+    # residual is irreducible, the relative improvement collapses immediately
+    # and the network gives up, it saves energy, but spends *less* where there
+    # is *more* surprise, which is the opposite of what the architecture
+    # promises.
     settle_rel_tol: float = 0.0
-    # Saturação, o equivalente à aritmética saturante do int8. Sem isto, uma
-    # trama muito surpreendente faz o estado disparar e a surpresa *sobe*.
-    z_clip: float = 0.5  # teto de |Δz| por iteração (0 = desligado)
-    z_max: float = 2.0  # teto de |z| nos níveis latentes (0 = desligado)
+    # Saturation, the equivalent of int8 saturating arithmetic. Without this,
+    # a very surprising frame makes the state blow up and the surprise *rises*.
+    z_clip: float = 0.5  # ceiling on |Δz| per iteration (0 = off)
+    z_max: float = 2.0  # ceiling on |z| in the latent levels (0 = off)
 
-    # --- esparsidade de código (separação de padrões) ----------------------
-    # Fração de unidades latentes que ficam ativas em cada trama (0 = todas).
-    # No córtex andam 1-5%; no giro dentado, menos ainda, e de propósito:
-    # entradas parecidas são forçadas a códigos esparsos e quase disjuntos
-    # para não se apagarem umas às outras. É a defesa principal do cérebro
-    # contra o esquecimento catastrófico, e a nossa rede não a tinha — todas
-    # as unidades participavam em todas as tramas, logo todos os pesos eram
-    # puxados por todas as tarefas.
-    # Implementada por competição: ficam as k maiores, as outras vão a zero.
-    # É inibição lateral, e sai de graça em conversões ADC.
+    # --- code sparsity (pattern separation) --------------------------------
+    # Fraction of latent units that stay active on each frame (0 = all).
+    # In cortex it is around 1-5%; in the dentate gyrus even less, and on
+    # purpose: similar inputs are forced into sparse, nearly disjoint codes
+    # so they do not erase one another. It is the brain's main defense
+    # against catastrophic forgetting, and our network did not have it, all
+    # units took part in every frame, so all weights were pulled by every
+    # task.
+    # Implemented by competition: the k largest stay, the others go to zero.
+    # It is lateral inhibition, and comes for free in ADC conversions.
     state_sparsity: float = 0.0
 
-    # --- esparsidade de erro -----------------------------------------------
-    # |ε| < theta  ->  o erro não é transmitido (silêncio = custo zero).
+    # --- error sparsity ----------------------------------------------------
+    # |ε| < theta  ->  the error is not transmitted (silence = zero cost).
     theta: float = 0.02
 
-    # --- aprendizagem local ------------------------------------------------
+    # --- local learning ----------------------------------------------------
     w_lr: float = 0.1  # ΔW ∝ ε · zᵀ
-    a_lr: float = 0.1  # ΔA ∝ ε_topo · z_prevᵀ  (transição temporal)
-    # --- metaplasticidade: sinapses que endurecem -------------------------
-    # Cada peso guarda a média do quadrado do seu próprio gradiente local — a
-    # sua "importância" — e a taxa efetiva dele passa a ser lr/(1+λ·imp). Uma
-    # sinapse que já provou importar resiste a ser reescrita, e a tarefa
-    # seguinte é obrigada a usar sinapses diferentes: união em vez de
-    # compromisso.
+    a_lr: float = 0.1  # ΔA ∝ ε_topo · z_prevᵀ  (temporal transition)
+    # --- metaplasticity: synapses that harden -----------------------------
+    # Each weight stores the running mean square of its own local gradient,
+    # its "importance", and its effective rate becomes lr/(1+λ·imp). A
+    # synapse that has already proven to matter resists being rewritten, and
+    # the next task is forced to use different synapses: union instead of
+    # compromise.
     #
-    # É o análogo do alargamento da espinha dendrítica e dos modelos em
-    # cascata de Fusi. E note-se o que isto tem de particular: em ML,
-    # proteger pesos importantes (EWC) exige a informação de Fisher, que
-    # exige backprop. Aqui o gradiente local já está na sinapse — a
-    # importância sai de graça, e é uma coisa que uma rede com backprop não
-    # consegue fazer sem maquinaria extra.
+    # It is the analogue of dendritic spine enlargement and of Fusi's cascade
+    # models. And note what is special about this: in ML, protecting
+    # important weights (EWC) requires the Fisher information, which requires
+    # backprop. Here the local gradient is already at the synapse, the
+    # importance comes for free, and it is something a backprop network
+    # cannot do without extra machinery.
     metaplasticity: float = 0.0
-    meta_decay: float = 0.999  # esquecimento da importância acumulada
+    meta_decay: float = 0.999  # forgetting of the accumulated importance
 
-    # Plasticidade aberta pela surpresa (acetilcolina/noradrenalina): não se
-    # aprende quando o mundo é previsível. Protege o passado e poupa energia.
-    plasticity_gate: float = 0.0  # 0 = sempre a aprender
+    # Plasticity opened by surprise (acetylcholine/noradrenaline): there is no
+    # learning when the world is predictable. Protects the past and saves energy.
+    plasticity_gate: float = 0.0  # 0 = always learning
 
     weight_decay: float = 0.0
-    grad_clip: float = 1.0  # teto no |ΔW| por passo, estabilidade
+    grad_clip: float = 1.0  # ceiling on |ΔW| per step, stability
 
-    # --- estado temporal ---------------------------------------------------
-    # O topo mantém memória entre tramas: ẑ_L(t) = tanh(A · z_L(t-1)).
-    # É a "via rápida" em forma mínima: uma recorrência linear.
+    # --- temporal state ----------------------------------------------------
+    # The top keeps memory across frames: ẑ_L(t) = tanh(A · z_L(t-1)).
+    # It is the "fast path" in minimal form: a linear recurrence.
     use_transition: bool = True
-    # Nº de dinâmicas no topo (ver mixture.py). 1 = uma matriz só, que é o
-    # comportamento anterior. >1 dá à rede regimes alternativos e um selector
-    # por contexto — sem isto, tarefas com dinâmicas diferentes puxam a única
-    # matriz para uma média que não serve nenhuma, e aumentar o tamanho da
-    # rede não resolve (medido: dobrar os parâmetros não muda nada).
-    # Transição com portões multiplicativos (ver gated.py): a dinâmica do
-    # topo passa a ser escolhida pelo erro, unidade a unidade, em função do
-    # contexto — o mecanismo que a decomposição do muro apontou como a maior
-    # parte da distância para o backprop.
+    # Number of dynamics at the top (see mixture.py). 1 = a single matrix,
+    # which is the previous behavior. >1 gives the network alternative regimes
+    # and a context selector, without it, tasks with different dynamics pull
+    # the single matrix toward an average that serves none, and growing the
+    # network does not fix it (measured: doubling the parameters changes nothing).
+    # Transition with multiplicative gates (see gated.py): the top's dynamics
+    # becomes chosen by the error, unit by unit, as a function of the
+    # context, the mechanism that the decomposition of the wall pointed to as
+    # the largest part of the distance to backprop.
     gated_transition: bool = False
-    # Traços de elegibilidade na transição portada (e-prop / synaptic
-    # tagging): crédito através do tempo com memória por sinapse, sem BPTT.
+    # Eligibility traces in the gated transition (e-prop / synaptic
+    # tagging): credit through time with per-synapse memory, without BPTT.
     eligibility: bool = False
-    # Crítico de 1 bit (frente 4): a atualização local fica provisória; se a
-    # surpresa em malha aberta da trama SEGUINTE exceder este fator vezes a
-    # média móvel, retrai-se — o equivalente da dopamina a dizer "não ajudou".
-    # 0 = desligado. É o remédio para o defeito medido no relé talâmico: a
-    # regra local não sabe quando as suas próprias atualizações se atrapalham.
+    # 1-bit critic (front 4): the local update becomes provisional; if the
+    # open-loop surprise of the NEXT frame exceeds this factor times the
+    # running mean, it is retracted, the equivalent of dopamine saying "it
+    # did not help".
+    # 0 = off. It is the remedy for the defect measured in the thalamic relay:
+    # the local rule does not know when its own updates get in their own way.
     critic_retract: float = 0.0
-    # O relé talâmico: o candidato e o portão da transição veem também a
-    # trama anterior, em paralelo com o estado recorrente (ver gated.py).
+    # The thalamic relay: the transition's candidate and gate also see the
+    # previous frame, in parallel with the recurrent state (see gated.py).
     thalamic: bool = False
-    # Portões também nas camadas geradoras: ẑ_l = g⊙f(W·z), g = σ(G·z + b).
-    # O crédito continua local — ΔW ganha o fator g, ΔG usa ε⊙f(Wz)⊙g(1-g) —
-    # e o caminho ascendente ganha o termo do portão. É o análogo espacial do
-    # portão temporal: decidir por unidade *que parte* da previsão se aplica
-    # neste contexto.
+    # Gates also in the generator layers: ẑ_l = g⊙f(W·z), g = σ(G·z + b).
+    # Credit stays local, ΔW gains the factor g, ΔG uses ε⊙f(Wz)⊙g(1-g),
+    # and the ascending path gains the gate term. It is the spatial analogue
+    # of the temporal gate: deciding per unit *which part* of the prediction
+    # applies in this context.
     gated_layers: bool = False
     n_dynamics: int = 1
-    dynamics_tau: float = 0.25  # nitidez do selector (baixo = mais exclusivo)
+    dynamics_tau: float = 0.25  # selector sharpness (low = more exclusive)
     proto_lr: float = 0.02
-    state_leak: float = 0.0  # fuga aplicada a z_L(t-1) antes da transição
+    state_leak: float = 0.0  # leak applied to z_L(t-1) before the transition
 
-    # --- hierarquia de escalas de tempo (ver temporal.py) ------------------
-    # "none" reproduz o passo 1: só o topo tem memória, os níveis intermédios
-    # são instantâneos. "diagonal" dá a cada unidade a sua constante de tempo
-    # (n parâmetros por nível — a versão barata e literalmente biológica).
-    # "dense" deixa cada nível misturar-se consigo próprio (n² por nível).
+    # --- hierarchy of timescales (see temporal.py) -------------------------
+    # "none" reproduces step 1: only the top has memory, the intermediate
+    # levels are instantaneous. "diagonal" gives each unit its own time
+    # constant (n parameters per level, the cheap and literally biological
+    # version). "dense" lets each level mix with itself (n² per level).
     level_transition: str = "none"
-    # --- via rápida (secção 4 do CONTEXTO) --------------------------------
-    # Uma via curta e sempre ligada que prevê a trama seguinte diretamente da
-    # anterior, sem passar pela hierarquia. A hierarquia deixa de ter de
-    # explicar o sinal e passa a explicar só o que a via rápida falha:
+    # --- fast path (section 4 of CONTEXTO) --------------------------------
+    # A short, always-on path that predicts the next frame directly from the
+    # previous one, without going through the hierarchy. The hierarchy no
+    # longer has to explain the signal and only explains what the fast path
+    # misses:
     #
     #     ẑ_0 = A_0·z_0(t-1)  +  f(W_0·z_1)
-    #           └─ via rápida ┘  └ hierarquia ┘
+    #           └─ fast path ┘  └ hierarchy ┘
     #
-    # A decomposição é aditiva de propósito: os gradientes de tudo o resto
-    # ficam exatamente iguais. Mas cada via aprende com o *seu próprio* erro,
-    # não com o mesmo — treinar ambas no mesmo resíduo fá-las disputar o mesmo
-    # sinal sem nada que atribua crédito (medido: ETTm1 0.230 -> 0.724).
-    # É a "shallow brain hypothesis" na sua forma mais pobre — uma via
-    # cortico-subcortical curta em paralelo com a via profunda.
+    # The decomposition is additive on purpose: the gradients of everything
+    # else stay exactly the same. But each path learns from *its own* error,
+    # not from the same one, training both on the same residual makes them
+    # fight over the same signal with nothing to assign credit (measured:
+    # ETTm1 0.230 -> 0.724).
+    # It is the "shallow brain hypothesis" in its poorest form, a short
+    # cortico-subcortical path in parallel with the deep one.
     fast_path: bool = False
-    # Fração do erro que a via rápida corrige por trama (passo normalizado,
-    # ver network.py). Adimensional: 1.0 corrigiria o erro todo de uma vez.
+    # Fraction of the error the fast path corrects per frame (normalized
+    # step, see network.py). Dimensionless: 1.0 would correct the whole error
+    # at once.
     fast_path_lr: float = 0.1
-    # λ do nível latente mais baixo, e quanto abranda por degrau. ratio=2:
-    # cada nível integra sobre o dobro do tempo do de baixo.
+    # λ of the lowest latent level, and how much it slows per step. ratio=2:
+    # each level integrates over twice the time of the one below.
     timescale_base: float = 1.0
     timescale_ratio: float = 2.0
-    b_lr: float = 0.05  # taxa de aprendizagem das transições por nível
+    b_lr: float = 0.05  # learning rate of the per-level transitions
 
-    # --- precisão (ver precision.py) ---------------------------------------
-    # π por nível: o ganho com que cada erro conta. Com isto ligado, o limiar
-    # θ passa a ser aplicado ao erro normalizado √π·ε, e a mesma constante quer
-    # dizer a mesma coisa no nível sensorial e no topo.
+    # --- precision (see precision.py) --------------------------------------
+    # π per level: the gain with which each error counts. With this on, the
+    # threshold θ is applied to the normalized error √π·ε, and the same
+    # constant means the same thing at the sensory level and at the top.
     use_precision: bool = False
     precision_per_unit: bool = False
     precision_lr: float = 0.01
 
     seed: int = 0
-    init_scale: float = 1.0  # multiplicador do init ~ 1/sqrt(fan_in)
+    init_scale: float = 1.0  # multiplier on the init ~ 1/sqrt(fan_in)
 
     def __post_init__(self) -> None:
         if len(self.sizes) < 2:
@@ -193,20 +199,20 @@ class PCConfig:
         if self.timescale_ratio < 1.0:
             raise ValueError("timescale_ratio < 1 poria o topo mais rápido que a base")
 
-    # -- utilidades ---------------------------------------------------------
+    # -- utilities ----------------------------------------------------------
     @classmethod
     def recommended(cls, **overrides) -> "PCConfig":
-        """A melhor configuração medida até agora.
+        """The best configuration measured so far.
 
-        Via rápida + precisão: melhor exatidão e 5-10× menos conversões ADC
-        do que os defaults, em três conjuntos diferentes (ver README).
+        Fast path + precision: better accuracy and 5-10x fewer ADC
+        conversions than the defaults, on three different datasets (see README).
 
-        Porque é que não são os defaults: os defaults reproduzem exatamente os
-        passos 1 e 2 do plano, e há artefactos publicados contra eles —
-        `runs/phase0/model.h`, os vetores de referência do C, e todos os
-        números do README. Mudar os defaults invalidaria esse registo sem
-        acrescentar nada que este método não dê. É uma decisão a tomar quando
-        houver um demonstrador escolhido, não antes.
+        Why these are not the defaults: the defaults reproduce exactly steps
+        1 and 2 of the plan, and there are published artifacts against them,
+        `runs/phase0/model.h`, the C reference vectors, and every number in
+        the README. Changing the defaults would invalidate that record
+        without adding anything this method does not already give. It is a
+        decision to make once a demonstrator has been chosen, not before.
         """
         base = dict(fast_path=True, fast_path_lr=0.05, use_precision=True)
         return cls(**{**base, **overrides})
@@ -217,7 +223,7 @@ class PCConfig:
 
     @property
     def n_weights(self) -> int:
-        """Número de matrizes geradoras W_l (uma por par de níveis)."""
+        """Number of generator matrices W_l (one per pair of levels)."""
         return len(self.sizes) - 1
 
     def to_dict(self) -> dict:

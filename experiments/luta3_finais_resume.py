@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""LUTA 3 — retoma das FINAIS após morte do processo a meio.
+"""FIGHT 3 - resume of the FINALS after the process died midway.
 
-A fase de seleção correu completa sob o protocolo pré-registado
-(luta3_dados_virgens.py, commit 87c4bab) e está registada em
-experiments/luta3_finais.txt: vencedores nós topo=16 | adv GRU h16
-lr=1e-3 | NLMS mu=0.1 | ESN (leak 0.3, rho 0.8). Este guião executa
-APENAS as finais com esses vencedores, sem alterar nada do protocolo:
-20 seeds por lado, teste usado apenas aqui, regra de decisão IC
-bootstrap 95% + Welch + Cohen's d, como declarado.
+The selection phase ran to completion under the pre-registered protocol
+(luta3_dados_virgens.py, commit 87c4bab) and is recorded in
+experiments/luta3_finais.txt: winners us top=16 | adv GRU h16
+lr=1e-3 | NLMS mu=0.1 | ESN (leak 0.3, rho 0.8). This script runs
+ONLY the finals with those winners, changing nothing in the protocol:
+20 seeds per side, test set used only here, decision rule bootstrap
+95% CI + Welch + Cohen's d, as declared.
 """
 import sys
 sys.path.insert(0, "experiments")
@@ -19,7 +19,7 @@ from luta3_dados_virgens import (train_ours, eval_ours, train_adv, eval_adv,
 TOP, ADV, MU, ESN_CFG = 16, ("gru", 16, 1e-3), 0.1, (0.3, 0.8)
 
 if __name__ == "__main__":
-    print("LUTA 3 — FINAIS (retoma; seleção registada em luta3_finais.txt)",
+    print("LUTA 3 - FINAIS (retoma; seleção registada em luta3_finais.txt)",
           flush=True)
     print(f"vencedores: nós topo={TOP} | adv {ADV} | NLMS mu={MU} | "
           f"ESN {ESN_CFG}\n", flush=True)
@@ -43,4 +43,4 @@ if __name__ == "__main__":
     stats_block(ours, adv, "NÓS", "ADV")
     stats_block(ours, esn, "NÓS", "ESN")
     print(f"  NÓS vs NLMS-AR ({nlms:.4f}) e persistência ({pers:.4f}): "
-          f"determinísticos — comparar com a média e o IC de NÓS.", flush=True)
+          f"determinísticos - comparar com a média e o IC de NÓS.", flush=True)

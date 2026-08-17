@@ -1,4 +1,4 @@
-"""Neurogénese: congeladas ficam mesmo congeladas, e a novidade recruta."""
+"""Neurogenesis: frozen units stay truly frozen, and novelty recruits."""
 
 import sys
 from pathlib import Path
@@ -22,8 +22,8 @@ def test_frozen_units_stay_silent_and_unlearned():
     net.run(sig.frames, learn=True)
     for l in range(1, net.L + 1):
         frozen = net.factor[l] == 0.0
-        assert frozen.any(), "metade da reserva devia começar congelada"
-        # estado a zero, pesos a zero — nem participam nem aprendem
+        assert frozen.any(), "half the reserve should start frozen"
+        # state at zero, weights at zero - they neither participate nor learn
         assert np.all(net.z[l][frozen] == 0.0)
         assert np.all(net.layers[l - 1].W[:, frozen] == 0.0)
         if l < net.L:
@@ -36,16 +36,16 @@ def test_frozen_units_stay_silent_and_unlearned():
 def test_novelty_recruits_and_protects():
     net = _net(warmup=30, sustain=10)
     a = make_signal(n_frames=200, frame_len=64, seed=3)
-    # mundo novo: outras frequências, amplitude diferente
+    # new world: other frequencies, different amplitude
     b = make_signal(n_frames=200, frame_len=64, freqs=(0.31, 0.11, 0.44), seed=9)
     net.run(a.frames, learn=True)
-    assert net.n_recruited == 0, "sem mudança de mundo não devia recrutar"
+    assert net.n_recruited == 0, "without a world change it should not recruit"
     before = net.active_counts()
     net.run(3.0 * b.frames, learn=True)
-    assert net.n_recruited > 0, "a mudança de mundo devia ter recrutado"
+    assert net.n_recruited > 0, "the world change should have recruited"
     after = net.active_counts()
     assert all(after[l] >= before[l] for l in after)
-    # as veteranas ficaram protegidas
+    # the veteran units stayed protected
     for l in range(1, net.L + 1):
         assert np.any(net.factor[l] == np.float32(net.ng.protect_factor))
 

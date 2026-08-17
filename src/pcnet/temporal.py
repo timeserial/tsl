@@ -1,27 +1,27 @@
-"""Hierarquia de escalas de tempo.
+"""Hierarchy of timescales.
 
-A versão do passo 1 tinha um único modelo temporal, no topo. Todos os níveis
-abaixo eram instantâneos: sabiam *o que* estava a acontecer mas não tinham
-memória nenhuma do seu próprio passado. O córtex não é assim.
+The step 1 version had a single temporal model, at the top. All the levels
+below were instantaneous: they knew *what* was happening but had no memory
+at all of their own past. The cortex is not like that.
 
-Hasson et al. mediram "janelas receptivas temporais" que crescem ao longo da
-hierarquia: o córtex auditivo primário integra sobre dezenas de milissegundos,
-áreas frontais sobre dezenas de segundos. Kiebel, Daunizeau & Friston (2008,
-"A hierarchy of time-scales and the brain") mostram que isto cai naturalmente
-de um modelo preditivo hierárquico onde cada nível tem a sua própria dinâmica,
-progressivamente mais lenta.
+Hasson et al. measured "temporal receptive windows" that grow along the
+hierarchy: primary auditory cortex integrates over tens of milliseconds,
+frontal areas over tens of seconds. Kiebel, Daunizeau & Friston (2008,
+"A hierarchy of time-scales and the brain") show that this falls naturally
+out of a hierarchical predictive model where each level has its own,
+progressively slower dynamics.
 
-Aqui, cada nível latente ganha:
+Here, each latent level gains:
 
-    ẑ_l(t) = f( A_l · z_l(t-1) )        com   A_l = (1-λ_l)·I + λ_l·B_l
+    ẑ_l(t) = f( A_l · z_l(t-1) )        with   A_l = (1-λ_l)·I + λ_l·B_l
 
-λ_l = 1/τ_l é a taxa do nível. τ cresce com l, portanto o topo quase não se
-mexe entre tramas (memória longa) e os níveis baixos seguem o sinal (memória
-curta). A parte identidade é o integrador com fuga; B_l é o que se aprende.
+λ_l = 1/τ_l is the level's rate. τ grows with l, so the top barely moves
+between frames (long memory) and the low levels follow the signal (short
+memory). The identity part is the leaky integrator; B_l is what gets learned.
 
-`kind="diagonal"` dá a cada unidade a sua própria constante de tempo e mais
-nada — é a versão mais barata e a mais literalmente biológica (a constante de
-tempo da membrana). `kind="dense"` deixa os níveis misturarem-se entre si.
+`kind="diagonal"` gives each unit its own time constant and nothing more -
+it is the cheapest version and the most literally biological (the membrane
+time constant). `kind="dense"` lets the levels mix within themselves.
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ from .dtypes import F
 
 
 class Transition:
-    """A previsão que um nível faz de si próprio no instante seguinte."""
+    """The prediction a level makes of itself at the next instant."""
 
     __slots__ = ("n", "kind", "lam", "B", "a", "_f", "_fprime")
 
@@ -58,8 +58,8 @@ class Transition:
                 + (rng.standard_normal((n, n)) * (init_scale / np.sqrt(n))).astype(F)
             )
         elif kind == "diagonal":
-            # Uma constante de tempo por unidade. Arranca em 1 (guardar o
-            # estado) com uma pitada de variabilidade, como neurónios reais.
+            # One time constant per unit. Starts at 1 (keep the state) with
+            # a pinch of variability, like real neurons.
             self.B = (1.0 + init_scale * rng.standard_normal(n)).astype(F)
         else:
             self.B = np.zeros(0, dtype=F)
@@ -90,7 +90,7 @@ class Transition:
         lr: float,
         grad_clip: float = 0.0,
     ) -> None:
-        """ΔB ∝ (ε ⊙ f') ⊗ z(t-1). Local: só o erro daqui e o estado de antes."""
+        """ΔB ∝ (ε ⊙ f') ⊗ z(t-1). Local: only the error here and the state from before."""
         if self.kind == "none" or lr <= 0.0:
             return
         mod = (eps * self._fprime(self.a) * self.lam).astype(F, copy=False)
@@ -103,7 +103,7 @@ class Transition:
         self.B += F(lr) * dB
 
     def sigma_max(self) -> float:
-        """Maior valor singular de A = (1-λ)I + λB, para o limite de estabilidade."""
+        """Largest singular value of A = (1-λ)I + λB, for the stability bound."""
         if self.kind == "none":
             return 1.0
         if self.kind == "diagonal":
@@ -113,10 +113,10 @@ class Transition:
 
 
 def timescales(n_levels: int, base: float, ratio: float) -> tuple[float, ...]:
-    """λ_l por nível: rápido em baixo, lento em cima.
+    """λ_l per level: fast at the bottom, slow at the top.
 
-    `base` é a taxa do nível latente mais baixo, `ratio` quanto ela abranda por
-    cada degrau. ratio=2 significa que cada nível integra sobre o dobro do
-    tempo do de baixo — a progressão que Hasson mede no córtex.
+    `base` is the rate of the lowest latent level, `ratio` how much it slows
+    per step. ratio=2 means each level integrates over twice the time of the
+    one below - the progression Hasson measures in the cortex.
     """
     return tuple(min(1.0, base / (ratio**l)) for l in range(n_levels))
