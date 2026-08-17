@@ -116,6 +116,11 @@ mirror: ## regenerate ../nn-public (history WITHOUT patente/ or paper/)
 	@cd ../nn-public && for h in b69c8f2 32efefe cc25ba9 a42f5b7; do \
 	  git cat-file -t $$h >/dev/null 2>&1 && echo "  $$h OK" || echo "  $$h FALTA"; done
 
+.PHONY: mirror-push
+mirror-push: mirror ## rebuild mirror and push it to github.com/timeserial/tsl
+	cd ../nn-public && git remote add public https://github.com/timeserial/tsl.git 2>/dev/null; \
+	cd ../nn-public && git push -q public HEAD:main --force && echo "public mirror updated"
+
 .PHONY: clean
 clean: ## remove temporary build artifacts
 	rm -rf $(SCRATCH) demo/esp32_surpresa/build .pytest_cache
