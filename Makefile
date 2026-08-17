@@ -110,10 +110,10 @@ mirror: ## regenerate ../nn-public (history WITHOUT patente/ or paper/)
 	git clone -q . ../nn-public
 	cd ../nn-public && $(CURDIR)/.venv/bin/git-filter-repo \
 	  --invert-paths --path patente --path paper \
-	  --path estudo --path infra \
-	  --path demo/lista_compras.md --path demo/lista_compras.pdf --force
+	  --path estudo --path infra --path demo --path runs \
+	  --path CONTEXTO.md --force
 	@echo "espelho em ../nn-public - verificar hashes antes de publicar:"
-	@cd ../nn-public && for h in b69c8f2 32efefe cc25ba9 a42f5b7; do \
+	@cd ../nn-public && for h in 01ad3ec 8726e8a 2b7d65b 0ab9e05 2d13695 7b7b79d; do \
 	  git cat-file -t $$h >/dev/null 2>&1 && echo "  $$h OK" || echo "  $$h FALTA"; done
 
 .PHONY: mirror-push
