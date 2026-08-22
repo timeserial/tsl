@@ -1,5 +1,11 @@
 # Sparse hierarchical predictive network - Phase 0
 
+**License:** research and evaluation use permitted under the
+[PolyForm Noncommercial 1.0.0](LICENSE.md) license; commercial use
+requires a license from Timeserial Unip. Lda. Patents pending, INPI
+(PT) nos. 20262008229018, 20262008250397, 20262008252600,
+20262008267111.
+
 A predictive hierarchy of 3
 generative layers (64 → 32 → 16 → 8) predicting the next frame of a signal,
 with local learning (no backprop), threshold-based sparsity and early exit;
